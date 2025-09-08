@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+
+{% block title %}Processar Áudio do YouTube{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header-section">
+        <h2>
+            <i class="fab fa-youtube text-red"></i>
+            Processamento de Áudio do YouTube
+        </h2>
+        <p class="subtitle">
+            Pipeline completa para diarização de locutores e preparação para STT
+        </p>
+    </div>
+
+    <!-- Formulário Principal -->
+    <div class="form-section">
+        <form id="processForm" class="process-form">
+            <!-- URL Input -->
+            <div class="form-group">
+                <label for="url">
+                    <i class="fas fa-link"></i>
+                    URL do YouTube
+                </label>
+                <input 
+                    type="url" 
+                    id="url" 
+                    name="url" 
+                    placeholder="https://www.youtube.com/watch?v=..." 
+                    required
+                    class="form-input"
+                >
+                <small class="form-help">Cole a URL completa do vídeo do YouTube</small>
+            </div>
+
+            <!-- Configurações Avançadas -->
+            <div class="advanced-options">
+                <button type="button" class="toggle-advanced" onclick="toggleAdvanced()">
+                    <i class="fas fa-cog"></i>
+                    Configurações Avançadas
+                    <i class="fas fa-chevron-down toggle-icon"></i>
+                </button>
+                
+                <div id="advancedOptions" class="advanced-content hidden">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="filename">
+                                <i class="fas fa-file-audio"></i>
+                                Nome do Arquivo
+                            </label>
+                            <input 
+                                type="text" 
+                                id="filename" 
+                                name="filename" 
+                                placeholder="nome_personalizado"
+                                class="form-input"
+                            >
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="session_name">
+                                <i class="fas fa-folder"></i>
+                                Nome da Sessão
+                            </label>
+                            <input 
+                                type="text" 
+                                id="session_name" 
+                                name="session_name" 
+                                placeholder="minha_sessao"
+                                class="form-input"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="num_speakers">
+                                <i class="fas fa-users"></i>
+                                Número de Locutores (opcional)
+                            </label>
+                            <input 
+                                type="number" 
+                                id="num_speakers" 
+                                name="num_speakers" 
+                                min="1" 
+                                max="10"
+                                placeholder="Auto"
+                                class="form-input"
+                            >
+                            <small class="form-help">Deixe vazio para detecção automática</small>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="min_duration">
+                                <i class="fas fa-clock"></i>
+                                Duração Mín. Segmento (s)
+                            </label>
+                            <input 
+                                type="number" 
+                                id="min_duration" 
+                                name="min_duration" 
+                                value="10.0"
+                                step="0.5"
+                                min="5.0"
+                                max="30.0"
+                                class="form-input"
+                            >
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="max_duration">
+                                <i class="fas fa-clock"></i>
+                                Duração Máx. Segmento (s)
+                            </label>
+                            <input 
+                                type="number" 
+                                id="max_duration" 
+                                name="max_duration" 
+                                value="15.0"
+                                step="0.5"
+                                min="10.0"
+                                max="60.0"
+                                class="form-input"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="enhance_audio" name="enhance_audio" checked>
+                                <span class="checkmark"></span>
+                                <i class="fas fa-volume-up"></i>
+                                Melhorar qualidade do áudio
+                            </label>
+                            
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="intelligent_segmentation" name="intelligent_segmentation" checked>
+                                <span class="checkmark"></span>
+                                <i class="fas fa-brain"></i>
+                                Segmentação inteligente
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botão de Processar -->
+            <button type="submit" class="btn-process" id="processBtn">
+                <i class="fas fa-play"></i>
+                Processar Áudio
+            </button>
+        </form>
+    </div>
+
+    <!-- Progress Section -->
+    <div id="progressSection" class="progress-section hidden">
+        <div class="progress-container">
+            <h3 id="progressTitle">Processando...</h3>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <p id="progressMessage" class="progress-message">Iniciando...</p>
+            <div class="progress-details">
+                <span id="progressPercent">0%</span>
+                <span id="progressTime"></span>
+            </div>
+        </div>
+        
+        <div class="progress-steps">
+            <div class="step" data-step="waiting">
+                <i class="fas fa-hourglass-start"></i>
+                <span>Aguardando</span>
+            </div>
+            <div class="step" data-step="downloading">
+                <i class="fas fa-download"></i>
+                <span>Download</span>
+            </div>
+            <div class="step" data-step="segmenting">
+                <i class="fas fa-cut"></i>
+                <span>Segmentação</span>
+            </div>
+            <div class="step" data-step="diarizing">
+                <i class="fas fa-users"></i>
+                <span>Diarização</span>
+            </div>
+            <div class="step" data-step="detecting">
+                <i class="fas fa-search"></i>
+                <span>Detecção</span>
+            </div>
+            <div class="step" data-step="separating">
+                <i class="fas fa-divide"></i>
+                <span>Separação</span>
+            </div>
+            <div class="step" data-step="preparing">
+                <i class="fas fa-check"></i>
+                <span>Finalizando</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Section -->
+    <div id="errorSection" class="error-section hidden">
+        <div class="error-container">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h3>Erro no Processamento</h3>
+            <p id="errorMessage"></p>
+            <button onclick="resetForm()" class="btn-secondary">
+                <i class="fas fa-redo"></i>
+                Tentar Novamente
+            </button>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="features-section">
+        <h3>Recursos da Pipeline</h3>
+        <div class="features-grid">
+            <div class="feature-card">
+                <i class="fab fa-youtube"></i>
+                <h4>Download Direto</h4>
+                <p>Baixa áudio em FLAC com máxima qualidade diretamente do YouTube</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-cut"></i>
+                <h4>Segmentação Inteligente</h4>
+                <p>Divide o áudio respeitando pausas naturais e evitando corte de palavras</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-users"></i>
+                <h4>Diarização de Locutores</h4>
+                <p>Identifica e separa diferentes locutores usando IA state-of-the-art</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-search"></i>
+                <h4>Detecção de Sobreposição</h4>
+                <p>Identifica trechos com vozes sobrepostas para melhor qualidade</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-microphone"></i>
+                <h4>Preparação STT</h4>
+                <p>Organiza arquivos finais prontos para transcrição Speech-to-Text</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-download"></i>
+                <h4>Downloads Organizados</h4>
+                <p>Baixe os resultados organizados por locutor e prontos para uso</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentJobId = null;
+let progressInterval = null;
+
+function toggleAdvanced() {
+    const options = document.getElementById('advancedOptions');
+    const icon = document.querySelector('.toggle-icon');
+    
+    if (options.classList.contains('hidden')) {
+        options.classList.remove('hidden');
+        icon.classList.add('rotated');
+    } else {
+        options.classList.add('hidden');
+        icon.classList.remove('rotated');
+    }
+}
+
+function showProgress() {
+    document.getElementById('progressSection').classList.remove('hidden');
+    document.getElementById('errorSection').classList.add('hidden');
+    document.querySelector('.form-section').style.opacity = '0.7';
+    document.getElementById('processBtn').disabled = true;
+}
+
+function hideProgress() {
+    document.getElementById('progressSection').classList.add('hidden');
+    document.querySelector('.form-section').style.opacity = '1';
+    document.getElementById('processBtn').disabled = false;
+}
+
+function showError(message) {
+    document.getElementById('errorSection').classList.remove('hidden');
+    document.getElementById('errorMessage').textContent = message;
+    hideProgress();
+}
+
+function resetForm() {
+    document.getElementById('errorSection').classList.add('hidden');
+    document.getElementById('progressSection').classList.add('hidden');
+    document.querySelector('.form-section').style.opacity = '1';
+    document.getElementById('processBtn').disabled = false;
+    
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+    }
+    
+    // Reset progress
+    updateProgress('waiting', 0, 'Pronto para processar');
+}
+
+function updateProgress(status, progress, message) {
+    document.getElementById('progressFill').style.width = progress + '%';
+    document.getElementById('progressMessage').textContent = message;
+    document.getElementById('progressPercent').textContent = progress + '%';
+    
+    // Update steps
+    document.querySelectorAll('.step').forEach(step => {
+        step.classList.remove('active', 'completed');
+    });
+    
+    const currentStep = document.querySelector(`[data-step="${status}"]`);
+    if (currentStep) {
+        currentStep.classList.add('active');
+    }
+    
+    // Mark previous steps as completed
+    const steps = ['waiting', 'downloading', 'segmenting', 'diarizing', 'detecting', 'separating', 'preparing'];
+    const currentIndex = steps.indexOf(status);
+    
+    for (let i = 0; i < currentIndex; i++) {
+        const step = document.querySelector(`[data-step="${steps[i]}"]`);
+        if (step) {
+            step.classList.add('completed');
+            step.classList.remove('active');
+        }
+    }
+}
+
+function pollJobStatus(jobId) {
+    axios.get(`/status/${jobId}`)
+        .then(response => {
+            const data = response.data;
+            updateProgress(data.status, data.progress, data.message);
+            
+            if (data.status === 'completed') {
+                clearInterval(progressInterval);
+                setTimeout(() => {
+                    window.location.href = `/results/${jobId}`;
+                }, 1500);
+            } else if (data.status === 'failed') {
+                clearInterval(progressInterval);
+                showError(data.error || 'Erro desconhecido no processamento');
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao verificar status:', error);
+            clearInterval(progressInterval);
+            showError('Erro de comunicação com o servidor');
+        });
+}
+
+document.getElementById('processForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const data = {};
+    
+    // Get form data
+    for (let [key, value] of formData.entries()) {
+        if (value.trim() !== '') {
+            // Convert numeric fields
+            if (['num_speakers', 'min_duration', 'max_duration'].includes(key)) {
+                data[key] = parseFloat(value);
+            } else if (['enhance_audio', 'intelligent_segmentation'].includes(key)) {
+                data[key] = true; // Checkbox is checked if present
+            } else {
+                data[key] = value;
+            }
+        }
+    }
+    
+    // Handle checkboxes that aren't checked
+    if (!formData.has('enhance_audio')) data['enhance_audio'] = false;
+    if (!formData.has('intelligent_segmentation')) data['intelligent_segmentation'] = false;
+    
+    showProgress();
+    updateProgress('waiting', 0, 'Enviando solicitação...');
+    
+    axios.post('/process', data)
+        .then(response => {
+            currentJobId = response.data.job_id;
+            updateProgress('waiting', 5, 'Processamento iniciado...');
+            
+            // Start polling for status updates
+            progressInterval = setInterval(() => {
+                pollJobStatus(currentJobId);
+            }, 2000);
+        })
+        .catch(error => {
+            const message = error.response?.data?.error || 'Erro ao iniciar processamento';
+            showError(message);
+        });
+});
+</script>
+{% endblock %}
