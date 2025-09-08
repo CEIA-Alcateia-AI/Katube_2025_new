@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}Resultados do Processamento{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header-section">
+        <h2>
+            <i class="fas fa-check-circle text-green"></i>
+            Processamento Concluído
+        </h2>
+        <p class="subtitle">
+            Seus arquivos estão prontos para download e uso
+        </p>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="loading-state">
+        <i class="fas fa-spinner fa-spin"></i>
+        <p>Carregando resultados...</p>
+    </div>
+
+    <!-- Results Content -->
+    <div id="resultsContent" class="results-content hidden">
+        
+        <!-- Summary Cards -->
+        <div class="summary-cards">
+            <div class="summary-card">
+                <i class="fas fa-users"></i>
+                <div class="card-content">
+                    <h3 id="speakerCount">0</h3>
+                    <p>Locutores Identificados</p>
+                </div>
+            </div>
+            <div class="summary-card">
+                <i class="fas fa-file-audio"></i>
+                <div class="card-content">
+                    <h3 id="fileCount">0</h3>
+                    <p>Arquivos STT Prontos</p>
+                </div>
+            </div>
+            <div class="summary-card">
+                <i class="fas fa-clock"></i>
+                <div class="card-content">
+                    <h3 id="processingTime">0s</h3>
+                    <p>Tempo de Processamento</p>
+                </div>
+            </div>
+            <div class="summary-card">
+                <i class="fas fa-cut"></i>
+                <div class="card-content">
+                    <h3 id="segmentCount">0</h3>
+                    <p>Segmentos Criados</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video Info -->
+        <div class="info-section">
+            <h3>
+                <i class="fab fa-youtube"></i>
+                Informações do Processamento
+            </h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>Sessão:</strong>
+                    <span id="sessionName">-</span>
+                </div>
+                <div class="info-item">
+                    <strong>URL Original:</strong>
+                    <a id="originalUrl" href="#" target="_blank">-</a>
+                </div>
+                <div class="info-item">
+                    <strong>Segmentos Limpos:</strong>
+                    <span id="cleanSegments">-</span>
+                </div>
+                <div class="info-item">
+                    <strong>Segmentos com Sobreposição:</strong>
+                    <span id="overlappingSegments">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Speaker Details -->
+        <div class="speakers-section">
+            <h3>
+                <i class="fas fa-microphone-alt"></i>
+                Detalhes por Locutor
+            </h3>
+            <div id="speakersContainer" class="speakers-container">
+                <!-- Speaker cards will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Downloads Section -->
+        <div class="downloads-section">
+            <h3>
+                <i class="fas fa-download"></i>
+                Downloads Disponíveis
+            </h3>
+            <div class="download-grid">
+                <div class="download-card">
+                    <i class="fas fa-file-code"></i>
+                    <h4>Resultados JSON</h4>
+                    <p>Arquivo com todos os dados do processamento</p>
+                    <button onclick="downloadFile('results.json')" class="btn-download">
+                        <i class="fas fa-download"></i>
+                        Baixar JSON
+                    </button>
+                </div>
+                
+                <div id="speakerDownloads" class="speaker-downloads">
+                    <!-- Speaker download cards will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions-section">
+            <button onclick="window.location.href='/'" class="btn-primary">
+                <i class="fas fa-plus"></i>
+                Processar Outro Vídeo
+            </button>
+            
+            <button onclick="cleanupJob()" class="btn-secondary">
+                <i class="fas fa-trash"></i>
+                Limpar Dados
+            </button>
+        </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="error-state hidden">
+        <i class="fas fa-exclamation-triangle"></i>
+        <h3>Erro ao Carregar Resultados</h3>
+        <p id="errorMessage">Não foi possível carregar os resultados do processamento.</p>
+        <button onclick="window.location.href='/'" class="btn-secondary">
+            <i class="fas fa-home"></i>
+            Voltar ao Início
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const jobId = '{{ job_id }}';
+
+function formatDuration(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}m ${remainingSeconds}s`;
+}
+
+function formatTime(seconds) {
+    if (seconds < 60) {
+        return `${seconds.toFixed(1)}s`;
+    } else {
+        return formatDuration(seconds);
+    }
+}
+
+function createSpeakerCard(speaker, stats) {
+    return `
+        <div class="speaker-card">
+            <div class="speaker-header">
+                <i class="fas fa-user"></i>
+                <h4>Locutor ${speaker}</h4>
+            </div>
+            <div class="speaker-stats">
+                <div class="stat">
+                    <span class="stat-value">${stats.num_files}</span>
+                    <span class="stat-label">Arquivos</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">${formatTime(stats.total_duration)}</span>
+                    <span class="stat-label">Duração Total</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">${formatTime(stats.avg_file_duration)}</span>
+                    <span class="stat-label">Duração Média</span>
+                </div>
+            </div>
+            <button onclick="downloadFile('speaker_${speaker}')" class="btn-speaker-download">
+                <i class="fas fa-download"></i>
+                Baixar Arquivos
+            </button>
+        </div>
+    `;
+}
+
+function createSpeakerDownloadCard(speaker, stats) {
+    return `
+        <div class="download-card">
+            <i class="fas fa-user"></i>
+            <h4>Locutor ${speaker}</h4>
+            <p>${stats.num_files} arquivos • ${formatTime(stats.total_duration)}</p>
+            <button onclick="downloadFile('speaker_${speaker}')" class="btn-download">
+                <i class="fas fa-download"></i>
+                Baixar ZIP
+            </button>
+        </div>
+    `;
+}
+
+function downloadFile(fileType) {
+    const downloadUrl = `/download/${jobId}/${fileType}`;
+    
+    // Create temporary link and trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = '';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function cleanupJob() {
+    if (confirm('Tem certeza que deseja limpar os dados deste processamento? Esta ação não pode ser desfeita.')) {
+        axios.post(`/cleanup/${jobId}`)
+            .then(() => {
+                alert('Dados limpos com sucesso!');
+                window.location.href = '/';
+            })
+            .catch(error => {
+                console.error('Erro ao limpar dados:', error);
+                alert('Erro ao limpar dados. Tente novamente.');
+            });
+    }
+}
+
+function loadResults() {
+    axios.get(`/result/${jobId}`)
+        .then(response => {
+            const data = response.data;
+            const results = data.results;
+            const stats = results.statistics;
+            
+            // Hide loading, show content
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('resultsContent').classList.remove('hidden');
+            
+            // Update summary cards
+            document.getElementById('speakerCount').textContent = stats.num_speakers;
+            document.getElementById('fileCount').textContent = stats.total_stt_files;
+            document.getElementById('processingTime').textContent = formatTime(data.processing_time);
+            document.getElementById('segmentCount').textContent = results.num_segments;
+            
+            // Update info section
+            document.getElementById('sessionName').textContent = results.session_name;
+            document.getElementById('originalUrl').href = results.url;
+            document.getElementById('originalUrl').textContent = results.url;
+            document.getElementById('cleanSegments').textContent = results.num_clean_segments;
+            document.getElementById('overlappingSegments').textContent = results.num_overlapping_segments;
+            
+            // Create speaker cards
+            const speakersContainer = document.getElementById('speakersContainer');
+            const speakerDownloads = document.getElementById('speakerDownloads');
+            
+            let speakerCardsHtml = '';
+            let downloadCardsHtml = '';
+            
+            for (const [speaker, speakerStats] of Object.entries(stats.speakers)) {
+                speakerCardsHtml += createSpeakerCard(speaker, speakerStats);
+                downloadCardsHtml += createSpeakerDownloadCard(speaker, speakerStats);
+            }
+            
+            speakersContainer.innerHTML = speakerCardsHtml;
+            speakerDownloads.innerHTML = downloadCardsHtml;
+            
+        })
+        .catch(error => {
+            console.error('Erro ao carregar resultados:', error);
+            
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('errorState').classList.remove('hidden');
+            
+            const errorMessage = error.response?.data?.error || 'Erro desconhecido ao carregar resultados';
+            document.getElementById('errorMessage').textContent = errorMessage;
+        });
+}
+
+// Load results when page loads
+document.addEventListener('DOMContentLoaded', loadResults);
+</script>
+{% endblock %}

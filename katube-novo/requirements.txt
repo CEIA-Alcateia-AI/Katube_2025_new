@@ -1,0 +1,34 @@
+# Core dependencies
+torch>=2.0.0
+torchaudio>=2.0.0
+transformers>=4.30.0
+pyannote.audio>=3.1.0
+yt-dlp>=2023.7.6
+pydub>=0.25.1
+librosa>=0.10.0
+soundfile>=0.12.1
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tqdm>=4.65.0
+scikit-learn>=1.3.0
+
+# Audio processing and quality
+noisereduce>=3.0.0
+pyloudnorm>=0.1.0
+webrtcvad>=2.0.10
+
+# Overlap detection dependencies
+speechbrain>=0.5.0
+asteroid>=0.7.0
+
+# Web interface
+Flask>=2.3.0
+Flask-CORS>=4.0.0
+
+# Utility
+PyYAML
+requests>=2.25.0
+python-dotenv>=1.0.0
