@@ -69,7 +69,7 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Batch speaker diarization for WAV files in a directory.")
     parser.add_argument('directory', type=str, help='Path to the directory containing WAV files.')
-    parser.add_argument('--huggingface_token', type=str, required=False, default="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", help='Hugging Face access token for authentication.')
+    parser.add_argument('--huggingface_token', type=str, required=False, default="HUGGINGFACE_TOKEN", help='Hugging Face access token for authentication.')
 
     args = parser.parse_args()
 
