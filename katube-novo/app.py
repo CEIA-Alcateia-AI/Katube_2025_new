@@ -110,7 +110,6 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
         # Denosar todos os segmentos (substitua `all_segments_to_denoise` pelo que você já definiu na pipeline)
         denoised_segments = pipeline.denoise_segments(segments)
         job.update("denoising", 99, f"Denoised {len(denoised_segments)} segments")
-
         
         # Complete results
         processing_time = time.time() - job.start_time.timestamp()
