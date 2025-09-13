@@ -16,6 +16,7 @@ from .audio_segmenter_optimized import OptimizedAudioSegmenter
 from .diarizer import EnhancedDiarizer
 from .overlap_detector import OverlapDetector
 from .speaker_separator import SpeakerSeparator
+from .denoiser import Denoiser
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class AudioProcessingPipeline:
     4. Detect voice overlaps
     5. Separate audio by speakers
     6. Prepare for STT processing
+    7. Denoise audio segments
     """
     
     def __init__(self, 
@@ -47,6 +49,7 @@ class AudioProcessingPipeline:
         self.diarizer = EnhancedDiarizer(huggingface_token)
         self.overlap_detector = OverlapDetector()
         self.speaker_separator = SpeakerSeparator()
+        self.denoiser = Denoiser()
         
         # Pipeline state
         self.current_session = None
@@ -227,6 +230,34 @@ class AudioProcessingPipeline:
         logger.info(f"Speaker separation: {total_speakers} speakers, {total_segments} segments")
         
         return separation_results
+
+    def denoise_segments(self, segments: List[Path], output_dir: Optional[Path] = None) -> List[Path]:
+        """
+        Step 7: Denoise audio segments.
+        
+        Args:
+            segments: Lista de arquivos de áudio a serem denoisados
+            output_dir: Diretório para salvar os arquivos denoisados
+            
+        Returns:
+            Lista de arquivos denoisados
+        """
+        logger.info("=== STEP 7: DENOISING AUDIO SEGMENTS ===")
+        
+        output_dir = output_dir or (self.session_dir / 'clean')
+        output_dir.mkdir(exist_ok=True)
+        
+        denoised_paths = []
+        for seg_path in segments:
+            try:
+                output_path = output_dir / f"{seg_path.stem}_denoised.{Config.AUDIO_FORMAT}"
+                self.denoiser.process_file(seg_path, output_path)
+                denoised_paths.append(output_path)
+            except Exception as e:
+                logger.error(f"Denoising failed for {seg_path.name}: {e}")
+        
+        logger.info(f"Denoised {len(denoised_paths)}/{len(segments)} segments")
+        return denoised_paths
     
     def prepare_for_stt(self, separation_results: Dict[str, Any]) -> Dict[str, List[Path]]:
         """
@@ -334,6 +365,10 @@ class AudioProcessingPipeline:
             
             # Step 6: STT preparation
             stt_files = self.prepare_for_stt(separation_results)
+
+           # Step 7: Denoising
+            all_segments_to_denoise = segments
+            denoised_segments = self.denoise_segments(all_segments_to_denoise)
             
             # Final results
             processing_time = time.time() - start_time
@@ -349,6 +384,7 @@ class AudioProcessingPipeline:
                 'num_overlapping_segments': len(overlapping_segments),
                 'diarization_results': diarization_results,
                 'separation_results': separation_results,
+                'denoised_segments': [str(p) for p in denoised_segments],
                 'stt_ready_files': stt_files,
                 'statistics': self._generate_statistics(stt_files, separation_results)
             }
@@ -356,7 +392,6 @@ class AudioProcessingPipeline:
             # Save results to JSON
             results_file = session_dir / 'pipeline_results.json'
             with open(results_file, 'w') as f:
-                # Convert Path objects to strings for JSON serialization
                 json_results = self._prepare_for_json(results)
                 json.dump(json_results, f, indent=2, ensure_ascii=False)
             
@@ -365,7 +400,7 @@ class AudioProcessingPipeline:
             logger.info(f"Results saved to: {results_file}")
             
             return results
-            
+        
         except Exception as e:
             logger.error(f"Pipeline failed: {e}")
             raise

@@ -104,6 +104,13 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
         
         # STT preparation
         stt_files = pipeline.prepare_for_stt(separation_results)
+
+        # Step 7: Denoising
+        job.update("denoising", 97, "Aplicando denoiser em todos os segmentos...")
+        # Denosar todos os segmentos (substitua `all_segments_to_denoise` pelo que você já definiu na pipeline)
+        denoised_segments = pipeline.denoise_segments(segments)
+        job.update("denoising", 99, f"Denoised {len(denoised_segments)} segments")
+
         
         # Complete results
         processing_time = time.time() - job.start_time.timestamp()
@@ -118,6 +125,7 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
             'num_clean_segments': len(clean_segments),
             'num_overlapping_segments': len(overlapping_segments),
             'stt_ready_files': stt_files,
+            'denoised_segments': [str(p) for p in denoised_segments],
             'statistics': pipeline._generate_statistics(stt_files, separation_results)
         }
         
