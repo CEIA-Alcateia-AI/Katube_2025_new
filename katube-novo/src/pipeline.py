@@ -2,13 +2,14 @@
 Main pipeline that orchestrates the complete YouTube audio processing workflow.
 """
 import os
+import shutil
 import time
+from tqdm import tqdm
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union, Tuple
 import logging
 import json
 from datetime import datetime
-
 from .config import Config
 from .youtube_downloader import YouTubeDownloader
 from .audio_segmenter import AudioSegmenter
@@ -72,6 +73,17 @@ class AudioProcessingPipeline:
         
         logger.info(f"Created session: {self.current_session}")
         return self.session_dir
+
+    def cleanup(self, stages_to_clean: Optional[List[str]] = None):
+        for stage in stages_to_clean:
+            diretories_to_delete = self.session_dir / stage
+            if diretories_to_delete.exists():
+                try:                    
+                    logger.info(f"\n\n[FINAL CLEAN-UP] Deletando a pasta: {diretories_to_delete}")
+                    shutil.rmtree(diretories_to_delete)
+                    logger.info(f"✅ Sucesso: Diretório de downloads deletado: {diretories_to_delete}")
+                except Exception as e:
+                    logger.error(f"❌ Falha ao deletar o diretório de downloads: {e}")
     
     def download_youtube_audio(self, url: str, custom_filename: Optional[str] = None) -> Path:
         """
@@ -84,7 +96,7 @@ class AudioProcessingPipeline:
         Returns:
             Path to downloaded audio file
         """
-        logger.info("=== STEP 1: DOWNLOADING YOUTUBE AUDIO ===")
+        logger.info("\n\n=== STEP 1: DOWNLOADING YOUTUBE AUDIO ===")
         
         if not self.session_dir:
             raise ValueError("No active session. Call create_session() first.")
@@ -109,7 +121,7 @@ class AudioProcessingPipeline:
         Returns:
             List of segment file paths
         """
-        logger.info("=== STEP 2: SEGMENTING AUDIO ===")
+        logger.info("\n\n=== STEP 2: SEGMENTING AUDIO ===")
         
         segments_dir = self.session_dir / 'segments'
         
@@ -134,7 +146,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary with diarization results
         """
-        logger.info("=== STEP 3: PERFORMING SPEAKER DIARIZATION ===")
+        logger.info("\n\n=== STEP 3: PERFORMING SPEAKER DIARIZATION ===")
         
         diarization_dir = self.session_dir / 'diarization'
         
@@ -166,7 +178,7 @@ class AudioProcessingPipeline:
         Returns:
             Tuple of (clean_segments, overlapping_segments)
         """
-        logger.info("=== STEP 4: DETECTING VOICE OVERLAPS ===")
+        logger.info("\n\n=== STEP 4: DETECTING VOICE OVERLAPS ===")
         
         overlap_dir = self.session_dir / 'overlapping'
         clean_dir = self.session_dir / 'clean'
@@ -191,7 +203,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary with speaker separation results
         """
-        logger.info("=== STEP 5: SEPARATING SPEAKERS ===")
+        logger.info("\n\n=== STEP 5: SEPARATING SPEAKERS ===")
         
         speakers_dir = self.session_dir / 'speakers'
         separation_results = {}
@@ -242,13 +254,13 @@ class AudioProcessingPipeline:
         Returns:
             Lista de arquivos denoisados
         """
-        logger.info("=== STEP 7: DENOISING AUDIO SEGMENTS ===")
+        logger.info("\n\n=== STEP 7: DENOISING AUDIO SEGMENTS AND CLEAN UP ===")
         
         output_dir = output_dir or (self.session_dir / 'clean')
         output_dir.mkdir(exist_ok=True)
         
         denoised_paths = []
-        for seg_path in segments:
+        for seg_path in tqdm(segments, desc="Denoising segments"):
             try:
                 output_path = output_dir / f"{seg_path.stem}_denoised.{Config.AUDIO_FORMAT}"
                 self.denoiser.process_file(seg_path, output_path)
@@ -257,6 +269,9 @@ class AudioProcessingPipeline:
                 logger.error(f"Denoising failed for {seg_path.name}: {e}")
         
         logger.info(f"Denoised {len(denoised_paths)}/{len(segments)} segments")
+
+        self.cleanup(stages_to_clean=['downloads', 'segments'])
+
         return denoised_paths
     
     def prepare_for_stt(self, separation_results: Dict[str, Any]) -> Dict[str, List[Path]]:
@@ -269,7 +284,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary of STT-ready files organized by speaker
         """
-        logger.info("=== STEP 6: PREPARING FOR STT ===")
+        logger.info("\n\n=== STEP 6: PREPARING FOR STT ===")
         
         stt_dir = self.session_dir / 'stt_ready'
         stt_files = {}
@@ -341,7 +356,7 @@ class AudioProcessingPipeline:
         """
         start_time = time.time()
         
-        logger.info("=== STARTING COMPLETE PIPELINE ===")
+        logger.info("\n\n== STARTING COMPLETE PIPELINE ===")
         logger.info(f"URL: {url}")
         
         try:
@@ -366,13 +381,16 @@ class AudioProcessingPipeline:
             # Step 6: STT preparation
             stt_files = self.prepare_for_stt(separation_results)
 
+            print("\nDEBUG: Ponto de verificação #1 - Início da finalização.")
+
            # Step 7: Denoising
             all_segments_to_denoise = segments
             denoised_segments = self.denoise_segments(all_segments_to_denoise)
             
             # Final results
             processing_time = time.time() - start_time
-            
+
+            print("DEBUG: Ponto de verificação #2 - Montando o dicionário de resultados.")
             results = {
                 'session_name': self.current_session,
                 'session_dir': str(session_dir),
@@ -389,16 +407,19 @@ class AudioProcessingPipeline:
                 'statistics': self._generate_statistics(stt_files, separation_results)
             }
             
+            print("DEBUG: Ponto de verificação #3 - Preparando para salvar o arquivo JSON.")
             # Save results to JSON
             results_file = session_dir / 'pipeline_results.json'
             with open(results_file, 'w') as f:
+                print("DEBUG: Ponto de verificação #4 - Convertendo resultados para o formato JSON.")
                 json_results = self._prepare_for_json(results)
+                print("DEBUG: Ponto de verificação #5 - Escrevendo o arquivo JSON no disco.")
                 json.dump(json_results, f, indent=2, ensure_ascii=False)
             
-            logger.info("=== PIPELINE COMPLETED SUCCESSFULLY ===")
+            logger.info("\n\n\n=== PIPELINE COMPLETED SUCCESSFULLY ===")
             logger.info(f"Processing time: {processing_time:.2f}s")
             logger.info(f"Results saved to: {results_file}")
-            
+
             return results
         
         except Exception as e:

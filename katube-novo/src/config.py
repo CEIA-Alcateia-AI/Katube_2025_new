@@ -12,7 +12,7 @@ class Config:
     # Audio settings
     AUDIO_FORMAT = os.getenv('AUDIO_FORMAT', 'flac')
     AUDIO_QUALITY = os.getenv('AUDIO_QUALITY', 'best')
-    SAMPLE_RATE = int(os.getenv('SAMPLE_RATE', '24000'))
+    SAMPLE_RATE = int(os.getenv('SAMPLE_RATE', '48000'))
     SEGMENT_MIN_DURATION = float(os.getenv('SEGMENT_MIN_DURATION', '10.0'))
     SEGMENT_MAX_DURATION = float(os.getenv('SEGMENT_MAX_DURATION', '15.0'))
     SEGMENT_OVERLAP = float(os.getenv('SEGMENT_OVERLAP', '0.5'))
@@ -27,7 +27,7 @@ class Config:
     
     # Directories
     BASE_DIR = Path(__file__).parent.parent
-    AUDIOS_BAIXADOS_DIR = Path(os.getenv('AUDIOS_BAIXADOS_DIR', r'C:\Users\Usuário\Desktop\katube-novo\audios_baixados'))
+    AUDIOS_BAIXADOS_DIR = Path(os.getenv('AUDIOS_BAIXADOS_DIR', r'C:\Igor\BIA\Alcateia\Katube_2025_new\audios_download'))
     OUTPUT_DIR = AUDIOS_BAIXADOS_DIR / "output"
     TEMP_DIR = AUDIOS_BAIXADOS_DIR / "temp"
     SEGMENTS_DIR = OUTPUT_DIR / "segments"
