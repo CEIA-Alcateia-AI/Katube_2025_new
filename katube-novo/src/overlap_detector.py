@@ -11,7 +11,7 @@ import torch
 import torchaudio
 import librosa
 from pyannote.audio import Pipeline
-from pyannote.audio.pipelines import OverlapSpeechDetection
+from pyannote.core import Segment
 
 from .config import Config
 
@@ -25,7 +25,6 @@ class OverlapDetector:
         
         # Load pyannote segmentation model for OSD
         self.pipeline = None
-        self.overlap_detector = None
         self._load_model()
     
     def _load_model(self):
@@ -34,18 +33,14 @@ class OverlapDetector:
             # Load the segmentation model
             self.pipeline = Pipeline.from_pretrained("pyannote/segmentation-3.0")
             
-            # Create overlap speech detection pipeline
-            self.overlap_detector = OverlapSpeechDetection(self.pipeline)
-            
             logger.info("✅ Loaded pyannote/segmentation-3.0 model for OSD")
         except Exception as e:
             logger.error(f"❌ Could not load pyannote segmentation model: {e}")
             self.pipeline = None
-            self.overlap_detector = None
     
     def detect_overlap(self, audio_path: Path) -> Dict[str, Any]:
         """
-        Detect overlapping speech in audio file using pyannote OSD.
+        Detect overlapping speech in audio file using pyannote segmentation.
         
         Args:
             audio_path: Path to audio file
@@ -53,25 +48,27 @@ class OverlapDetector:
         Returns:
             Dictionary with overlap detection results
         """
-        if not self.overlap_detector:
-            logger.error("❌ Overlap detector not loaded")
+        if not self.pipeline:
+            logger.error("❌ Pipeline not loaded")
             return {"error": "Model not loaded"}
         
         try:
-            # Load audio
-            audio, sr = sf.read(audio_path)
-            
-            # Resample to 16kHz if needed (pyannote requires 16kHz)
-            if sr != 16000:
-                audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
-                sr = 16000
-            
             logger.debug(f"🔍 Analyzing overlap in: {audio_path.name}")
             
-            # Run overlap detection
-            overlap_segments = self.overlap_detector({"audio": audio_path})
+            # Run segmentation to get speech segments and overlap detection
+            segmentation = self.pipeline({"audio": str(audio_path)})
             
-            # Convert to list of segments
+            # Extract overlap segments (segments with overlap=True)
+            overlap_segments = []
+            speech_segments = []
+            
+            for segment, track, label in segmentation.itertracks(yield_label=True):
+                if label == "SPEECH":
+                    speech_segments.append(segment)
+                elif label == "OVERLAP":
+                    overlap_segments.append(segment)
+            
+            # Convert to list format
             overlap_list = []
             for segment in overlap_segments:
                 overlap_list.append({
@@ -81,7 +78,7 @@ class OverlapDetector:
                 })
             
             # Calculate overlap statistics
-            total_duration = len(audio) / sr
+            total_duration = sum(seg.end - seg.start for seg in speech_segments)
             overlap_duration = sum(seg["duration"] for seg in overlap_list)
             overlap_percentage = (overlap_duration / total_duration) * 100 if total_duration > 0 else 0
             
