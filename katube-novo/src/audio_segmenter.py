@@ -381,7 +381,7 @@ class AudioSegmenter:
             
             # Skip segments that are too short
             if duration < self.min_duration:
-                continue
+                    continue
             
             # Handle segments that are too long
             if duration > 60.0:  # More than 60s
@@ -415,7 +415,7 @@ class AudioSegmenter:
                 # Normal segment processing
                 segment_audio = audio[start_sample:end_sample]
                 duration = len(segment_audio) / self.sample_rate
-                
+            
                 # Save segment
                 filename = f"{audio_path.stem}_segment_{segment_idx:04d}.{Config.AUDIO_FORMAT}"
                 segment_path = output_dir / filename

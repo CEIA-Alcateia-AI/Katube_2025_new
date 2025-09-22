@@ -1123,9 +1123,9 @@ class AudioProcessingPipeline:
         
         try:
             # Create output directories following the desired structure
-            validated_dir = output_dir / 'audios_validados_tts'
-            denoised_dir = output_dir / 'audios_denoiser'
-            rejected_dir = output_dir / 'audio_rejeitado_validacao'
+            validated_dir = output_dir / 'stt_results' / 'audios_validados_tts'
+            denoised_dir = output_dir / 'stt_results' / 'audios_denoiser'
+            rejected_dir = output_dir / 'stt_results' / 'audio_rejeitado_validacao'
             
             validated_dir.mkdir(parents=True, exist_ok=True)
             denoised_dir.mkdir(parents=True, exist_ok=True)
@@ -1139,16 +1139,18 @@ class AudioProcessingPipeline:
                 filename = result['filename']
                 similarity = result['similarity']
                 
-                # Search for the actual audio file in multiple possible locations
+                # Search for the actual audio file in stt_ready subdirectories
                 audio_file = None
                 possible_locations = [
-                    # First, try stt_ready directory (organized by speaker)
+                    # Search in stt_ready subdirectories (speaker_SPEAKER_00, speaker_SPEAKER_01, etc.)
+                    output_dir / 'stt_ready' / 'speaker_SPEAKER_00',
+                    output_dir / 'stt_ready' / 'speaker_SPEAKER_01',
+                    output_dir / 'stt_ready' / 'speaker_SPEAKER_02',
+                    output_dir / 'stt_ready' / 'speaker_SPEAKER_03',
+                    # Fallback locations
                     output_dir / 'stt_ready',
-                    # Then try speakers directory (has subdirectories)
                     output_dir / 'speakers',
-                    # Also check segments_aprovados (original segments)
                     output_dir / 'segments_aprovados',
-                    # Check segments directory as fallback
                     output_dir / 'segments'
                 ]
                 
@@ -1156,8 +1158,8 @@ class AudioProcessingPipeline:
                 for location in possible_locations:
                     if location.exists():
                         logger.debug(f"🔍 Searching in: {location}")
-                        # Search recursively for the file
-                        for audio_path in location.rglob("*.flac"):
+                        # Search for files in this specific location (no recursion needed for speaker folders)
+                        for audio_path in location.glob("*.flac"):
                             # Normalize both filenames for comparison (remove double underscores)
                             normalized_filename = filename.replace('__', '_')
                             normalized_stem = audio_path.stem.replace('__', '_')
