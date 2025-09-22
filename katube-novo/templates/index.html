@@ -1,37 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}Processar Áudio do YouTube{% endblock %}
+{% block title %}YouTube Audio Pipeline{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="header-section">
         <h2>
             <i class="fab fa-youtube text-red"></i>
-            Processamento de Áudio do YouTube
+            YouTube Audio Pipeline
         </h2>
         <p class="subtitle">
-            Pipeline completa para diarização de locutores e preparação para STT
+            Processamento automático de canais completos OU vídeos individuais do YouTube com IA
         </p>
     </div>
+
+
 
     <!-- Formulário Principal -->
     <div class="form-section">
         <form id="processForm" class="process-form">
+            <!-- Channel URL Input -->
+            <div class="form-group">
+                <label for="channelUrl">
+                    <i class="fas fa-tv"></i>
+                    URL do Canal (Opcional)
+                </label>
+                <input 
+                    type="text" 
+                    id="channelUrl" 
+                    name="channelUrl" 
+                    placeholder="https://www.youtube.com/@canal..." 
+                    class="form-input"
+                >
+                <small class="form-help">Cole a URL do canal para processar todos os vídeos automaticamente</small>
+            </div>
+            
             <!-- URL Input -->
             <div class="form-group">
                 <label for="url">
                     <i class="fas fa-link"></i>
-                    URL do YouTube
+                    URL do Vídeo (Opcional)
                 </label>
                 <input 
                     type="url" 
                     id="url" 
                     name="url" 
                     placeholder="https://www.youtube.com/watch?v=..." 
-                    required
                     class="form-input"
                 >
-                <small class="form-help">Cole a URL completa do vídeo do YouTube</small>
+                <small class="form-help">Para processar apenas um vídeo específico</small>
+            </div>
+            
+            <!-- Info Box -->
+            <div class="info-box">
+                <i class="fas fa-info-circle"></i>
+                <p><strong>Escolha uma opção:</strong> Insira a URL do canal para processar todos os vídeos OU a URL de um vídeo específico para processamento individual.</p>
             </div>
 
             <!-- Configurações Avançadas -->
@@ -89,6 +112,34 @@
                                 class="form-input"
                             >
                             <small class="form-help">Deixe vazio para detecção automática</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="mos_threshold">
+                                <i class="fas fa-star"></i>
+                                Limiar MOS (Qualidade)
+                            </label>
+                            <input 
+                                type="number" 
+                                id="mos_threshold" 
+                                name="mos_threshold" 
+                                min="1.0" 
+                                max="5.0" 
+                                step="0.1"
+                                value="2.0"
+                                class="form-input"
+                            >
+                            <small class="form-help">Nota mínima para aceitar áudio (1-5)</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="info-label">
+                                <i class="fas fa-filter"></i>
+                                Filtro de Qualidade MOS (OBRIGATÓRIO)
+                            </label>
+                            <small class="form-help">Filtro MOS é sempre habilitado - filtra áudios de baixa qualidade automaticamente</small>
                         </div>
                     </div>
 
@@ -179,25 +230,45 @@
                 <i class="fas fa-download"></i>
                 <span>Download</span>
             </div>
+            <div class="step" data-step="normalizing">
+                <i class="fas fa-volume-up"></i>
+                <span>Normalização</span>
+            </div>
             <div class="step" data-step="segmenting">
                 <i class="fas fa-cut"></i>
                 <span>Segmentação</span>
+            </div>
+            <div class="step" data-step="filtering">
+                <i class="fas fa-filter"></i>
+                <span>Filtro MOS</span>
             </div>
             <div class="step" data-step="diarizing">
                 <i class="fas fa-users"></i>
                 <span>Diarização</span>
             </div>
-            <div class="step" data-step="detecting">
+            <div class="step" data-step="overlap">
                 <i class="fas fa-search"></i>
-                <span>Detecção</span>
+                <span>Overlap</span>
             </div>
             <div class="step" data-step="separating">
                 <i class="fas fa-divide"></i>
                 <span>Separação</span>
             </div>
             <div class="step" data-step="preparing">
+                <i class="fas fa-microphone"></i>
+                <span>Prep. STT</span>
+            </div>
+            <div class="step" data-step="transcribing">
+                <i class="fas fa-file-alt"></i>
+                <span>STT + Validação</span>
+            </div>
+            <div class="step" data-step="denoising">
+                <i class="fas fa-magic"></i>
+                <span>Denoiser</span>
+            </div>
+            <div class="step" data-step="completed">
                 <i class="fas fa-check"></i>
-                <span>Finalizando</span>
+                <span>Concluído</span>
             </div>
         </div>
     </div>
@@ -215,42 +286,103 @@
         </div>
     </div>
 
-    <!-- Features Section -->
-    <div class="features-section">
-        <h3>Recursos da Pipeline</h3>
-        <div class="features-grid">
-            <div class="feature-card">
-                <i class="fab fa-youtube"></i>
-                <h4>Download Direto</h4>
-                <p>Baixa áudio em FLAC com máxima qualidade diretamente do YouTube</p>
-            </div>
-            <div class="feature-card">
-                <i class="fas fa-cut"></i>
-                <h4>Segmentação Inteligente</h4>
-                <p>Divide o áudio respeitando pausas naturais e evitando corte de palavras</p>
-            </div>
-            <div class="feature-card">
-                <i class="fas fa-users"></i>
-                <h4>Diarização de Locutores</h4>
-                <p>Identifica e separa diferentes locutores usando IA state-of-the-art</p>
-            </div>
-            <div class="feature-card">
-                <i class="fas fa-search"></i>
-                <h4>Detecção de Sobreposição</h4>
-                <p>Identifica trechos com vozes sobrepostas para melhor qualidade</p>
-            </div>
-            <div class="feature-card">
-                <i class="fas fa-microphone"></i>
-                <h4>Preparação STT</h4>
-                <p>Organiza arquivos finais prontos para transcrição Speech-to-Text</p>
-            </div>
-            <div class="feature-card">
-                <i class="fas fa-download"></i>
-                <h4>Downloads Organizados</h4>
-                <p>Baixe os resultados organizados por locutor e prontos para uso</p>
-            </div>
-        </div>
-    </div>
+     <!-- Features Section -->
+     <div class="features-section">
+         <h3>Recursos da Pipeline</h3>
+         <div class="features-grid">
+             <div class="feature-card">
+                 <i class="fab fa-youtube"></i>
+                 <h4>Download Direto</h4>
+                 <p>Baixa áudio em FLAC com máxima qualidade diretamente do YouTube</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">YT-DLP</span>
+                     <span class="tool-tag">FLAC</span>
+                     <span class="tool-tag">24KHZ</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-volume-up"></i>
+                 <h4>Normalização de Áudio</h4>
+                 <p>Normaliza áudio para FLAC 24kHz Mono usando FFmpeg</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">FFMPEG</span>
+                     <span class="tool-tag">24KHZ</span>
+                     <span class="tool-tag">MONO</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-cut"></i>
+                 <h4>Segmentação Inteligente</h4>
+                 <p>Divide o áudio respeitando pausas naturais e evitando corte de palavras</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">VAD</span>
+                     <span class="tool-tag">LIBROSA</span>
+                     <span class="tool-tag">SCIPY</span>
+                     <span class="tool-tag">WEBRTC</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-filter"></i>
+                 <h4>Filtro de Qualidade MOS</h4>
+                 <p>Filtra áudios de baixa qualidade usando Mean Opinion Score</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">SHEET</span>
+                     <span class="tool-tag">MOS-BENCH</span>
+                     <span class="tool-tag">PYTORCH</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-users"></i>
+                 <h4>Diarização de Locutores</h4>
+                 <p>Identifica e separa diferentes locutores usando IA state-of-the-art</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">PYANNOTE.AUDIO</span>
+                     <span class="tool-tag">HUGGING FACE</span>
+                     <span class="tool-tag">TRANSFORMERS</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-search"></i>
+                 <h4>Detecção de Sobreposição</h4>
+                 <p>Identifica trechos com vozes sobrepostas para melhor qualidade</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">WAV2VEC2</span>
+                     <span class="tool-tag">SPEECHBRAIN</span>
+                     <span class="tool-tag">OVERLAP DETECTION</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-divide"></i>
+                 <h4>Separação por Locutor</h4>
+                 <p>Separa áudio por locutor criando arquivos individuais</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">SPEAKER SEPARATION</span>
+                     <span class="tool-tag">RTTM</span>
+                     <span class="tool-tag">SOUNDFILE</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-file-alt"></i>
+                 <h4>STT Dual + Validação</h4>
+                 <p>Transcrição com Whisper e WAV2VEC2 + validação Levenshtein</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">WHISPER</span>
+                     <span class="tool-tag">WAV2VEC2</span>
+                     <span class="tool-tag">LEVENSHTEIN</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-magic"></i>
+                 <h4>Denoiser Final</h4>
+                 <p>Remove ruído dos áudios validados usando DeepFilterNet3</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">DEEPFILTERNET3</span>
+                     <span class="tool-tag">AI DENOISING</span>
+                     <span class="tool-tag">PYTORCH</span>
+                 </div>
+             </div>
+         </div>
+     </div>
 </div>
 {% endblock %}
 
@@ -319,10 +451,21 @@ function updateProgress(status, progress, message) {
     const currentStep = document.querySelector(`[data-step="${status}"]`);
     if (currentStep) {
         currentStep.classList.add('active');
+        
+        // Add success animation for completed steps
+        if (progress > 0 && status !== 'waiting') {
+            setTimeout(() => {
+                const icon = currentStep.querySelector('i');
+                if (icon && !icon.classList.contains('fa-check-circle')) {
+                    icon.className = 'fas fa-check-circle';
+                    currentStep.classList.add('success-pulse');
+                }
+            }, 500);
+        }
     }
     
-    // Mark previous steps as completed
-    const steps = ['waiting', 'downloading', 'segmenting', 'diarizing', 'detecting', 'separating', 'preparing'];
+    // Mark previous steps as completed with green checkmarks
+    const steps = ['waiting', 'downloading', 'normalizing', 'segmenting', 'filtering', 'diarizing', 'overlap', 'separating', 'preparing', 'transcribing', 'denoising', 'completed'];
     const currentIndex = steps.indexOf(status);
     
     for (let i = 0; i < currentIndex; i++) {
@@ -330,6 +473,12 @@ function updateProgress(status, progress, message) {
         if (step) {
             step.classList.add('completed');
             step.classList.remove('active');
+            
+            // Add green checkmark for completed steps
+            const icon = step.querySelector('i');
+            if (icon) {
+                icon.className = 'fas fa-check-circle';
+            }
         }
     }
 }
@@ -381,13 +530,59 @@ document.getElementById('processForm').addEventListener('submit', function(e) {
     if (!formData.has('enhance_audio')) data['enhance_audio'] = false;
     if (!formData.has('intelligent_segmentation')) data['intelligent_segmentation'] = false;
     
+    // Validate URLs
+    const channelUrl = data.channelUrl;
+    const videoUrl = data.url;
+    
+    // Check if at least one URL is provided
+    if ((!channelUrl || channelUrl.trim() === '') && (!videoUrl || videoUrl.trim() === '')) {
+        showError('Por favor, insira uma URL do canal OU uma URL de vídeo para processar');
+        return;
+    }
+    
+    // Validate channel URL if provided
+    if (channelUrl && channelUrl.trim() !== '') {
+        if (!isValidYouTubeUrl(channelUrl)) {
+            showError('Por favor, insira uma URL válida do canal YouTube (ex: https://www.youtube.com/@canal)');
+            return;
+        }
+    }
+    
+    // Validate video URL if provided
+    if (videoUrl && videoUrl.trim() !== '') {
+        if (!isValidYouTubeUrl(videoUrl)) {
+            showError('Por favor, insira uma URL válida do vídeo YouTube (ex: https://www.youtube.com/watch?v=...)');
+            return;
+        }
+    }
+    
+    // Check if both URLs are provided (not recommended)
+    if (channelUrl && channelUrl.trim() !== '' && videoUrl && videoUrl.trim() !== '') {
+        showError('Por favor, insira apenas uma URL: canal OU vídeo, não ambos');
+        return;
+    }
+    
     showProgress();
     updateProgress('waiting', 0, 'Enviando solicitação...');
     
-    axios.post('/process', data)
+    // Determine processing type based on input
+    let endpoint = '/process';
+    let progressMessage = 'Processamento iniciado...';
+    
+    if (channelUrl && channelUrl.trim() !== '') {
+        // Process entire channel
+        endpoint = '/process_channel';
+        progressMessage = 'Iniciando processamento do canal...';
+    } else if (videoUrl && videoUrl.trim() !== '') {
+        // Process single video
+        endpoint = '/process';
+        progressMessage = 'Iniciando processamento do vídeo...';
+    }
+    
+    axios.post(endpoint, data)
         .then(response => {
             currentJobId = response.data.job_id;
-            updateProgress('waiting', 5, 'Processamento iniciado...');
+            updateProgress('waiting', 5, progressMessage);
             
             // Start polling for status updates
             progressInterval = setInterval(() => {
@@ -399,5 +594,18 @@ document.getElementById('processForm').addEventListener('submit', function(e) {
             showError(message);
         });
 });
+
+function isValidYouTubeUrl(url) {
+    const patterns = [
+        /^https:\/\/www\.youtube\.com\/@[a-zA-Z0-9_-]+$/,
+        /^https:\/\/www\.youtube\.com\/channel\/[a-zA-Z0-9_-]+$/,
+        /^https:\/\/www\.youtube\.com\/c\/[a-zA-Z0-9_-]+$/,
+        /^https:\/\/www\.youtube\.com\/user\/[a-zA-Z0-9_-]+$/,
+        /^https:\/\/www\.youtube\.com\/watch\?v=[a-zA-Z0-9_-]+$/,
+        /^https:\/\/youtu\.be\/[a-zA-Z0-9_-]+$/
+    ];
+    
+    return patterns.some(pattern => pattern.test(url));
+}
 </script>
 {% endblock %}

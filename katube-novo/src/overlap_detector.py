@@ -131,8 +131,10 @@ class OverlapDetector:
             for i in range(0, len(audio) - window_samples, hop_samples):
                 window = audio[i:i + window_samples]
                 
-                # Process with Wav2Vec2
-                inputs = self.processor(window, sampling_rate=self.sample_rate, return_tensors="pt")
+                # Process with Wav2Vec2 (model expects 16kHz)
+                # Resample window to 16kHz for Wav2Vec2 model
+                window_16k = librosa.resample(window, orig_sr=self.sample_rate, target_sr=16000)
+                inputs = self.processor(window_16k, sampling_rate=16000, return_tensors="pt")
                 
                 with torch.no_grad():
                     outputs = self.model(**inputs)

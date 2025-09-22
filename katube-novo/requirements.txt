@@ -20,6 +20,10 @@ noisereduce>=3.0.0
 pyloudnorm>=0.1.0
 webrtcvad>=2.0.10
 
+# STT dependencies
+datasets>=2.0.0
+accelerate>=0.20.0
+
 # Overlap detection dependencies
 speechbrain>=0.5.0
 asteroid>=0.7.0
@@ -32,3 +36,13 @@ Flask-CORS>=4.0.0
 PyYAML
 requests>=2.25.0
 python-dotenv>=1.0.0
+
+# MOS Quality Assessment (SHEET)
+torch>=1.9.0
+torchaudio>=0.9.0
+# STT Models (Whisper + WAV2VEC2)
+transformers>=4.30.0
+torch>=2.0.0
+torchaudio>=2.0.0
+# STT Validation
+textdistance>=4.6.0
