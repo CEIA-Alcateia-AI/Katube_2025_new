@@ -1,18 +1,17 @@
 """
-Voice overlap detection to identify overlapping speech segments.
+Overlap Speech Detection (OSD) using pyannote.audio segmentation model.
 """
-import librosa
 import numpy as np
 import soundfile as sf
 import shutil
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 import logging
-from scipy import signal
-from scipy.stats import pearsonr
 import torch
 import torchaudio
-from transformers import Wav2Vec2Processor, Wav2Vec2Model
+import librosa
+from pyannote.audio import Pipeline
+from pyannote.audio.pipelines import OverlapSpeechDetection
 
 from .config import Config
 
@@ -24,257 +23,203 @@ class OverlapDetector:
         self.overlap_threshold = Config.OVERLAP_THRESHOLD
         self.min_speech_duration = Config.MIN_SPEECH_DURATION
         
-        # Load pre-trained model for feature extraction
-        self.processor = None
-        self.model = None
+        # Load pyannote segmentation model for OSD
+        self.pipeline = None
+        self.overlap_detector = None
         self._load_model()
     
     def _load_model(self):
-        """Load Wav2Vec2 model for speech feature extraction."""
+        """Load pyannote segmentation model for overlap speech detection."""
         try:
-            model_name = "facebook/wav2vec2-base"
-            self.processor = Wav2Vec2Processor.from_pretrained(model_name)
-            self.model = Wav2Vec2Model.from_pretrained(model_name)
-            logger.info("Loaded Wav2Vec2 model for overlap detection")
+            # Load the segmentation model
+            self.pipeline = Pipeline.from_pretrained("pyannote/segmentation-3.0")
+            
+            # Create overlap speech detection pipeline
+            self.overlap_detector = OverlapSpeechDetection(self.pipeline)
+            
+            logger.info("✅ Loaded pyannote/segmentation-3.0 model for OSD")
         except Exception as e:
-            logger.warning(f"Could not load Wav2Vec2 model: {e}")
-            self.processor = None
-            self.model = None
+            logger.error(f"❌ Could not load pyannote segmentation model: {e}")
+            self.pipeline = None
+            self.overlap_detector = None
     
-    def compute_energy(self, audio: np.ndarray, frame_size: int = 2048, hop_length: int = 512) -> np.ndarray:
-        """Compute energy-based features."""
-        # RMS energy
-        rms = librosa.feature.rms(y=audio, frame_length=frame_size, hop_length=hop_length)[0]
-        
-        # Zero crossing rate
-        zcr = librosa.feature.zero_crossing_rate(audio, frame_length=frame_size, hop_length=hop_length)[0]
-        
-        # Spectral centroid
-        spectral_centroid = librosa.feature.spectral_centroid(y=audio, sr=self.sample_rate, hop_length=hop_length)[0]
-        
-        # Combine features
-        features = np.vstack([rms, zcr, spectral_centroid])
-        return features
-    
-    def compute_mfcc_features(self, audio: np.ndarray) -> np.ndarray:
-        """Compute MFCC features for overlap detection."""
-        mfcc = librosa.feature.mfcc(
-            y=audio, 
-            sr=self.sample_rate, 
-            n_mfcc=13,
-            hop_length=512
-        )
-        
-        # Add delta and delta-delta features
-        delta_mfcc = librosa.feature.delta(mfcc)
-        delta2_mfcc = librosa.feature.delta(mfcc, order=2)
-        
-        # Combine features
-        features = np.vstack([mfcc, delta_mfcc, delta2_mfcc])
-        return features
-    
-    def detect_multiple_speakers_energy(self, audio: np.ndarray, window_size: float = 0.5) -> List[Tuple[float, float, float]]:
+    def detect_overlap(self, audio_path: Path) -> Dict[str, Any]:
         """
-        Detect overlapping speech using energy-based analysis.
+        Detect overlapping speech in audio file using pyannote OSD.
         
+        Args:
+            audio_path: Path to audio file
+            
         Returns:
-            List of (start_time, end_time, overlap_confidence) tuples
+            Dictionary with overlap detection results
         """
-        overlaps = []
-        window_samples = int(window_size * self.sample_rate)
-        hop_samples = window_samples // 2
-        
-        for i in range(0, len(audio) - window_samples, hop_samples):
-            window = audio[i:i + window_samples]
-            
-            # Compute spectral features
-            stft = librosa.stft(window, hop_length=256)
-            magnitude = np.abs(stft)
-            
-            # Analyze spectral characteristics
-            freq_bins = magnitude.shape[0]
-            
-            # Look for multiple energy peaks in frequency domain
-            energy_per_freq = np.mean(magnitude, axis=1)
-            peaks, _ = signal.find_peaks(energy_per_freq, height=np.max(energy_per_freq) * 0.3)
-            
-            # Check for harmonic structure indicating multiple speakers
-            if len(peaks) > 2:
-                # Analyze temporal variation
-                temporal_var = np.var(magnitude, axis=1)
-                high_var_freqs = np.sum(temporal_var > np.mean(temporal_var))
-                
-                # Calculate overlap confidence
-                overlap_confidence = min(1.0, (len(peaks) * high_var_freqs) / (freq_bins * 0.5))
-                
-                if overlap_confidence > self.overlap_threshold:
-                    start_time = i / self.sample_rate
-                    end_time = (i + window_samples) / self.sample_rate
-                    overlaps.append((start_time, end_time, overlap_confidence))
-        
-        # Merge nearby overlaps
-        merged_overlaps = self._merge_overlaps(overlaps, merge_distance=0.5)
-        return merged_overlaps
-    
-    def detect_overlap_with_wav2vec(self, audio: np.ndarray) -> List[Tuple[float, float, float]]:
-        """Detect overlaps using Wav2Vec2 features."""
-        if self.processor is None or self.model is None:
-            logger.warning("Wav2Vec2 model not available, falling back to energy-based detection")
-            return self.detect_multiple_speakers_energy(audio)
-        
-        overlaps = []
-        window_duration = 2.0  # 2 seconds
-        window_samples = int(window_duration * self.sample_rate)
-        hop_samples = window_samples // 2
+        if not self.overlap_detector:
+            logger.error("❌ Overlap detector not loaded")
+            return {"error": "Model not loaded"}
         
         try:
-            for i in range(0, len(audio) - window_samples, hop_samples):
-                window = audio[i:i + window_samples]
-                
-                # Process with Wav2Vec2 (model expects 16kHz)
-                # Resample window to 16kHz for Wav2Vec2 model
-                window_16k = librosa.resample(window, orig_sr=self.sample_rate, target_sr=16000)
-                inputs = self.processor(window_16k, sampling_rate=16000, return_tensors="pt")
-                
-                with torch.no_grad():
-                    outputs = self.model(**inputs)
-                    features = outputs.last_hidden_state.squeeze().numpy()
-                
-                # Analyze feature variance and patterns
-                feature_var = np.var(features, axis=0)
-                high_var_features = np.sum(feature_var > np.mean(feature_var))
-                
-                # Check for non-uniform patterns indicating overlap
-                temporal_patterns = np.diff(features, axis=0)
-                pattern_irregularity = np.mean(np.abs(temporal_patterns))
-                
-                # Calculate overlap confidence
-                overlap_confidence = min(1.0, (high_var_features + pattern_irregularity) / 100)
-                
-                if overlap_confidence > self.overlap_threshold:
-                    start_time = i / self.sample_rate
-                    end_time = (i + window_samples) / self.sample_rate
-                    overlaps.append((start_time, end_time, overlap_confidence))
-        
-        except Exception as e:
-            logger.error(f"Error in Wav2Vec2 overlap detection: {e}")
-            return self.detect_multiple_speakers_energy(audio)
-        
-        return self._merge_overlaps(overlaps, merge_distance=0.5)
-    
-    def _merge_overlaps(self, overlaps: List[Tuple[float, float, float]], merge_distance: float = 0.5) -> List[Tuple[float, float, float]]:
-        """Merge nearby overlap detections."""
-        if not overlaps:
-            return []
-        
-        # Sort by start time
-        overlaps = sorted(overlaps, key=lambda x: x[0])
-        merged = [overlaps[0]]
-        
-        for start, end, confidence in overlaps[1:]:
-            last_start, last_end, last_confidence = merged[-1]
+            # Load audio
+            audio, sr = sf.read(audio_path)
             
-            # Merge if close enough
-            if start - last_end <= merge_distance:
-                merged[-1] = (
-                    last_start,
-                    max(end, last_end),
-                    max(confidence, last_confidence)
-                )
-            else:
-                merged.append((start, end, confidence))
-        
-        return merged
+            # Resample to 16kHz if needed (pyannote requires 16kHz)
+            if sr != 16000:
+                audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
+                sr = 16000
+            
+            logger.debug(f"🔍 Analyzing overlap in: {audio_path.name}")
+            
+            # Run overlap detection
+            overlap_segments = self.overlap_detector({"audio": audio_path})
+            
+            # Convert to list of segments
+            overlap_list = []
+            for segment in overlap_segments:
+                overlap_list.append({
+                    "start": segment.start,
+                    "end": segment.end,
+                    "duration": segment.end - segment.start
+                })
+            
+            # Calculate overlap statistics
+            total_duration = len(audio) / sr
+            overlap_duration = sum(seg["duration"] for seg in overlap_list)
+            overlap_percentage = (overlap_duration / total_duration) * 100 if total_duration > 0 else 0
+            
+            result = {
+                "audio_path": str(audio_path),
+                "total_duration": total_duration,
+                "overlap_segments": overlap_list,
+                "overlap_duration": overlap_duration,
+                "overlap_percentage": overlap_percentage,
+                "has_overlap": overlap_percentage > (self.overlap_threshold * 100),
+                "overlap_count": len(overlap_list)
+            }
+            
+            logger.debug(f"📊 Overlap analysis: {overlap_percentage:.1f}% overlap, {len(overlap_list)} segments")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error in overlap detection for {audio_path}: {e}")
+            return {"error": str(e)}
     
-    def analyze_audio_file(self, audio_path: Path) -> Dict[str, Any]:
+    def process_segments(self, segments: List[Path], output_dir: Path) -> Dict[str, Any]:
         """
-        Analyze an audio file for overlapping speech.
+        Process multiple audio segments for overlap detection.
         
+        Args:
+            segments: List of audio segment paths
+            output_dir: Directory to save overlapping segments
+            
         Returns:
-            Dictionary containing overlap analysis results
+            Dictionary with processing results
         """
-        # Load audio
-        audio, sr = librosa.load(audio_path, sr=self.sample_rate, mono=True)
-        duration = len(audio) / sr
+        if not segments:
+            logger.warning("⚠️ No segments to process")
+            return {"error": "No segments provided"}
         
-        logger.info(f"Analyzing {audio_path.name} ({duration:.2f}s) for overlaps")
+        # Create overlapping directory
+        overlapping_dir = output_dir / 'overlapping'
+        overlapping_dir.mkdir(parents=True, exist_ok=True)
         
-        # Detect overlaps using multiple methods
-        energy_overlaps = self.detect_multiple_speakers_energy(audio)
-        wav2vec_overlaps = self.detect_overlap_with_wav2vec(audio)
+        overlapping_segments = []
+        non_overlapping_segments = []
         
-        # Combine results (take intersection for higher confidence)
-        combined_overlaps = []
+        logger.info(f"🔍 Processing {len(segments)} segments for overlap detection...")
         
-        for e_start, e_end, e_conf in energy_overlaps:
-            for w_start, w_end, w_conf in wav2vec_overlaps:
-                # Check for overlap between detections
-                overlap_start = max(e_start, w_start)
-                overlap_end = min(e_end, w_end)
+        for i, segment_path in enumerate(segments):
+            try:
+                logger.debug(f"Processing segment {i+1}/{len(segments)}: {segment_path.name}")
                 
-                if overlap_start < overlap_end:
-                    # There's overlap between the two detection methods
-                    combined_conf = (e_conf + w_conf) / 2
-                    combined_overlaps.append((overlap_start, overlap_end, combined_conf))
-        
-        # If no combined overlaps, use energy-based as fallback
-        if not combined_overlaps:
-            combined_overlaps = energy_overlaps
+                # Detect overlap
+                result = self.detect_overlap(segment_path)
+                
+                if "error" in result:
+                    logger.warning(f"⚠️ Error processing {segment_path.name}: {result['error']}")
+                    continue
+                
+                # Check if segment has significant overlap
+                if result["has_overlap"]:
+                    # Copy to overlapping directory
+                    overlapping_path = overlapping_dir / segment_path.name
+                    shutil.copy2(segment_path, overlapping_path)
+                    overlapping_segments.append(segment_path)
+                    
+                    logger.info(f"🔄 Overlapping segment: {segment_path.name} ({result['overlap_percentage']:.1f}% overlap)")
+                else:
+                    non_overlapping_segments.append(segment_path)
+                    logger.debug(f"✅ Non-overlapping segment: {segment_path.name}")
+                
+            except Exception as e:
+                logger.error(f"❌ Error processing segment {segment_path.name}: {e}")
+                continue
         
         # Calculate statistics
-        total_overlap_duration = sum(end - start for start, end, _ in combined_overlaps)
-        overlap_percentage = (total_overlap_duration / duration) * 100 if duration > 0 else 0
+        total_segments = len(segments)
+        overlapping_count = len(overlapping_segments)
+        non_overlapping_count = len(non_overlapping_segments)
+        overlap_percentage = (overlapping_count / total_segments) * 100 if total_segments > 0 else 0
         
-        return {
-            'file': str(audio_path),
-            'duration': duration,
-            'overlaps': combined_overlaps,
-            'total_overlap_duration': total_overlap_duration,
-            'overlap_percentage': overlap_percentage,
-            'num_overlaps': len(combined_overlaps),
-            'has_significant_overlap': overlap_percentage > 5.0  # More than 5% overlap
+        result = {
+            "total_segments": total_segments,
+            "overlapping_segments": overlapping_segments,
+            "non_overlapping_segments": non_overlapping_segments,
+            "overlapping_count": overlapping_count,
+            "non_overlapping_count": non_overlapping_count,
+            "overlap_percentage": overlap_percentage,
+            "overlapping_dir": str(overlapping_dir)
         }
+        
+        logger.info(f"📊 Overlap detection completed:")
+        logger.info(f"   - Total segments: {total_segments}")
+        logger.info(f"   - Overlapping: {overlapping_count} ({overlap_percentage:.1f}%)")
+        logger.info(f"   - Non-overlapping: {non_overlapping_count}")
+        
+        return result
     
-    def filter_overlapping_segments(self, segments: List[Path], output_dir: Path) -> Tuple[List[Path], List[Path]]:
+    def get_overlap_statistics(self, segments: List[Path]) -> Dict[str, Any]:
         """
-        Filter segments to separate clean vs overlapping audio.
+        Get overlap statistics for segments without moving files.
         
+        Args:
+            segments: List of audio segment paths
+            
         Returns:
-            Tuple of (clean_segments, overlapping_segments)
+            Dictionary with overlap statistics
         """
-        clean_segments = []
-        overlapping_segments = []
+        if not segments:
+            return {"error": "No segments provided"}
         
-        output_dir.mkdir(parents=True, exist_ok=True)
-        clean_dir = output_dir / "clean"
-        overlap_dir = output_dir / "overlapping"
-        clean_dir.mkdir(exist_ok=True)
-        overlap_dir.mkdir(exist_ok=True)
+        overlap_stats = []
+        total_overlap_duration = 0
+        total_duration = 0
         
         for segment_path in segments:
-            analysis = self.analyze_audio_file(segment_path)
-            
-            if analysis['has_significant_overlap']:
-                # Move to overlapping directory
-                overlap_path = overlap_dir / segment_path.name
-                shutil.copy2(str(segment_path), str(overlap_path))
-                overlapping_segments.append(overlap_path)
-                logger.info(f"Overlap detected in {segment_path.name}: {analysis['overlap_percentage']:.1f}%")
-            else:
-                # Keep in clean directory
-                clean_path = clean_dir / segment_path.name
-                shutil.copy2(str(segment_path), str(clean_path))
-                clean_segments.append(clean_path)
+            try:
+                result = self.detect_overlap(segment_path)
+                
+                if "error" not in result:
+                    overlap_stats.append({
+                        "segment": segment_path.name,
+                        "overlap_percentage": result["overlap_percentage"],
+                        "overlap_duration": result["overlap_duration"],
+                        "total_duration": result["total_duration"],
+                        "has_overlap": result["has_overlap"]
+                    })
+                    
+                    total_overlap_duration += result["overlap_duration"]
+                    total_duration += result["total_duration"]
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Error analyzing {segment_path.name}: {e}")
+                continue
         
-        logger.info(f"Filtered segments: {len(clean_segments)} clean, {len(overlapping_segments)} overlapping")
-        return clean_segments, overlapping_segments
-
-
-# Example usage
-if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    
-    detector = OverlapDetector()
-    # analysis = detector.analyze_audio_file(Path("input.flac"))
-    # print(f"Overlap analysis: {analysis}")
+        overall_overlap_percentage = (total_overlap_duration / total_duration) * 100 if total_duration > 0 else 0
+        
+        return {
+            "segments_analyzed": len(overlap_stats),
+            "total_duration": total_duration,
+            "total_overlap_duration": total_overlap_duration,
+            "overall_overlap_percentage": overall_overlap_percentage,
+            "segment_details": overlap_stats
+        }
