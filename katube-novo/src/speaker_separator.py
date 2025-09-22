@@ -282,7 +282,9 @@ class SpeakerSeparator:
                 
                 # Save final compilation if not empty
                 if compilation_audio:
-                    self._save_compilation(compilation_audio, speaker, compilation_idx, 
+                    # Convert list to numpy array
+                    compilation_array = np.array(compilation_audio, dtype=np.float32)
+                    self._save_compilation([compilation_array], speaker, compilation_idx, 
                                          output_dir, compilation_files)
                 
             except Exception as e:
@@ -305,7 +307,18 @@ class SpeakerSeparator:
                          output_dir: Path, compilation_files: Dict[str, Path]):
         """Save compilation audio file."""
         try:
-            compilation_audio = np.concatenate(audio_data)
+            # Check if audio_data is empty or contains only empty arrays
+            if not audio_data or all(len(arr) == 0 for arr in audio_data):
+                logger.warning(f"No audio data to save for speaker {speaker}")
+                return
+                
+            # Filter out empty arrays before concatenation
+            valid_audio_data = [arr for arr in audio_data if len(arr) > 0]
+            if not valid_audio_data:
+                logger.warning(f"No valid audio data to save for speaker {speaker}")
+                return
+                
+            compilation_audio = np.concatenate(valid_audio_data)
             filename = f"speaker_{speaker}_compilation_{idx:02d}.{Config.AUDIO_FORMAT}"
             output_path = output_dir / filename
             
