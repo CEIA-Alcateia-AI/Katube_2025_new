@@ -9,17 +9,18 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
+from .naming_utils import extract_base_name, generate_standard_name
 
 logger = logging.getLogger(__name__)
 
 class WAV2VEC2STTTranscriber:
     """
     WAV2VEC2 STT transcriber for audio segments.
-    Specialized for Portuguese Brazilian using lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2
+    Specialized for Portuguese Brazilian using alefiury/wav2vec2-large-xlsr-53-coraa-brazilian-portuguese-gain-normalization
     """
     
     def __init__(self, 
-                 wav2vec2_model_name: str = "lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2",
+                 wav2vec2_model_name: str = "alefiury/wav2vec2-large-xlsr-53-coraa-brazilian-portuguese-gain-normalization",
                  device: str = "cpu"):
         """
         Initialize WAV2VEC2 STT transcriber.
@@ -43,7 +44,7 @@ class WAV2VEC2STTTranscriber:
         try:
             # Load WAV2VEC2 model (especializado em português brasileiro)
             logger.info(f"Loading WAV2VEC2 model: {self.wav2vec2_model_name}")
-            logger.info("   Model: lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2")
+            logger.info("   Model: alefiury/wav2vec2-large-xlsr-53-coraa-brazilian-portuguese-gain-normalization")
             logger.info("   Specialized for Brazilian Portuguese")
             
             self.wav2vec2_processor = Wav2Vec2Processor.from_pretrained(
@@ -151,8 +152,10 @@ class WAV2VEC2STTTranscriber:
                 # Transcribe with WAV2VEC2
                 transcription = self.transcribe_audio(segment_path)
                 
-                # Save transcription
-                wav2vec2_file = wav2vec2_dir / f"{segment_path.stem}_wav2vec2.txt"
+                # Save transcription with standardized naming
+                base_name = extract_base_name(segment_path)
+                standard_name = generate_standard_name(base_name, "stt_wav2vec2", i+1)
+                wav2vec2_file = wav2vec2_dir / f"{standard_name}.txt"
                 with open(wav2vec2_file, 'w', encoding='utf-8') as f:
                     f.write(transcription)
                 

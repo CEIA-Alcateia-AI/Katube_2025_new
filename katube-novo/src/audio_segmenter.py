@@ -12,6 +12,7 @@ from scipy.signal import find_peaks
 import pyloudnorm as pyln
 
 from .config import Config
+from .naming_utils import extract_base_name, generate_standard_name
 
 logger = logging.getLogger(__name__)
 
@@ -399,7 +400,10 @@ class AudioSegmenter:
                     
                     # Only save chunks that meet minimum duration
                     if chunk_duration_actual >= self.min_duration:
-                        filename = f"{audio_path.stem}_segment_{segment_idx:04d}_chunk_{chunk_idx:02d}.{Config.AUDIO_FORMAT}"
+                        # Use standardized naming
+                        base_name = extract_base_name(audio_path)
+                        standard_name = generate_standard_name(base_name, "chunk", chunk_idx)
+                        filename = f"{standard_name}.{Config.AUDIO_FORMAT}"
                         segment_path = output_dir / filename
                         
                         sf.write(segment_path, chunk_audio, self.sample_rate)
@@ -417,7 +421,10 @@ class AudioSegmenter:
                 duration = len(segment_audio) / self.sample_rate
             
                 # Save segment
-                filename = f"{audio_path.stem}_segment_{segment_idx:04d}.{Config.AUDIO_FORMAT}"
+                # Use standardized naming
+                base_name = extract_base_name(audio_path)
+                standard_name = generate_standard_name(base_name, "segment", segment_idx)
+                filename = f"{standard_name}.{Config.AUDIO_FORMAT}"
                 segment_path = output_dir / filename
                 
                 sf.write(segment_path, segment_audio, self.sample_rate)
@@ -474,7 +481,10 @@ class AudioSegmenter:
             duration = len(segment_audio) / self.sample_rate
             
             if duration >= self.min_duration:
-                filename = f"{audio_path.stem}_segment_{segment_idx:04d}.{Config.AUDIO_FORMAT}"
+                # Use standardized naming
+                base_name = extract_base_name(audio_path)
+                standard_name = generate_standard_name(base_name, "segment", segment_idx)
+                filename = f"{standard_name}.{Config.AUDIO_FORMAT}"
                 segment_path = output_dir / filename
                 
                 sf.write(segment_path, segment_audio, self.sample_rate)

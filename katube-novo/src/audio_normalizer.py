@@ -7,6 +7,7 @@ import subprocess
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
+from .naming_utils import extract_base_name, generate_standard_name
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,10 @@ class AudioNormalizer:
         try:
             # Generate output path if not provided
             if output_path is None:
-                output_path = input_path.with_suffix(f'.normalized.{self.target_format}')
+                # Use standardized naming
+                base_name = extract_base_name(input_path)
+                standard_name = generate_standard_name(base_name, "normalized")
+                output_path = input_path.parent / f"{standard_name}.{self.target_format}"
             
             logger.info(f"🔄 Normalizing audio: {input_path.name}")
             logger.info(f"   Target: {self.target_format}, {self.target_sample_rate}Hz, {self.target_channels} channel(s)")
