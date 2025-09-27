@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
+from .naming_utils import extract_base_name, generate_standard_name
 
 logger = logging.getLogger(__name__)
 
@@ -156,8 +157,10 @@ class WhisperSTTTranscriber:
                 # Transcribe with Whisper
                 transcription = self.transcribe_audio(segment_path)
                 
-                # Save transcription
-                whisper_file = whisper_dir / f"{segment_path.stem}_whisper.txt"
+                # Save transcription with standardized naming
+                base_name = extract_base_name(segment_path)
+                standard_name = generate_standard_name(base_name, "stt_whisper", i+1)
+                whisper_file = whisper_dir / f"{standard_name}.txt"
                 with open(whisper_file, 'w', encoding='utf-8') as f:
                     f.write(transcription)
                 
