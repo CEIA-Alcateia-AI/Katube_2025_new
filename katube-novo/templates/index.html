@@ -313,7 +313,7 @@
              <div class="feature-card">
                  <i class="fas fa-cut"></i>
                  <h4>Segmentação Inteligente</h4>
-                 <p>Divide o áudio respeitando pausas naturais e evitando corte de palavras</p>
+                 <p>Divide o áudio respeitando pausas naturais e evitando corte de palavra com VAD</p>
                  <div class="feature-tools">
                      <span class="tool-tag">VAD</span>
                      <span class="tool-tag">LIBROSA</span>
@@ -324,17 +324,17 @@
              <div class="feature-card">
                  <i class="fas fa-filter"></i>
                  <h4>Filtro de Qualidade MOS</h4>
-                 <p>Filtra áudios de baixa qualidade usando Mean Opinion Score</p>
+                 <p>Classificação de MOS em 3 niveis: Aprovados (≥3.0), Intermediários (2.5-3.0), Rejeitados (<2.5)</p>
                  <div class="feature-tools">
                      <span class="tool-tag">SHEET</span>
                      <span class="tool-tag">MOS-BENCH</span>
-                     <span class="tool-tag">PYTORCH</span>
+                     <span class="tool-tag">3-TIER</span>
                  </div>
              </div>
              <div class="feature-card">
                  <i class="fas fa-users"></i>
                  <h4>Diarização de Locutores</h4>
-                 <p>Identifica e separa diferentes locutores usando IA state-of-the-art</p>
+                 <p>Identifica e separa diferentes locutores pyannote.audio 3.1</p>
                  <div class="feature-tools">
                      <span class="tool-tag">PYANNOTE.AUDIO</span>
                      <span class="tool-tag">HUGGING FACE</span>
@@ -343,18 +343,18 @@
              </div>
              <div class="feature-card">
                  <i class="fas fa-search"></i>
-                 <h4>Detecção de Sobreposição</h4>
-                 <p>Identifica trechos com vozes sobrepostas para melhor qualidade</p>
+                 <h4>Detecção de Sobreposição (OSD)</h4>
+                 <p>Identifica trechos com vozes sobrepostas usando pyannote/segmentation-3.0 e overlap speech detection</p>
                  <div class="feature-tools">
-                     <span class="tool-tag">WAV2VEC2</span>
-                     <span class="tool-tag">SPEECHBRAIN</span>
-                     <span class="tool-tag">OVERLAP DETECTION</span>
+                     <span class="tool-tag">PYANNOTE.AUDIO</span>
+                     <span class="tool-tag">SEGMENTATION-3.0</span>
+                     <span class="tool-tag">OSD</span>
                  </div>
              </div>
              <div class="feature-card">
                  <i class="fas fa-divide"></i>
                  <h4>Separação por Locutor</h4>
-                 <p>Separa áudio por locutor criando arquivos individuais</p>
+                 <p>Separa áudio por locutor criando arquivos individuais com rttm</p>
                  <div class="feature-tools">
                      <span class="tool-tag">SPEAKER SEPARATION</span>
                      <span class="tool-tag">RTTM</span>
@@ -363,22 +363,53 @@
              </div>
              <div class="feature-card">
                  <i class="fas fa-file-alt"></i>
-                 <h4>STT Dual + Validação</h4>
-                 <p>Transcrição com Whisper e WAV2VEC2 + validação Levenshtein</p>
+                 <h4>STT Dual</h4>
+                 <p>Transcrição com Whisper e WAV2VEC2</p>
                  <div class="feature-tools">
-                     <span class="tool-tag">WHISPER</span>
-                     <span class="tool-tag">WAV2VEC2</span>
+                     <span class="tool-tag">DISTIL-WHISPER</span>
+                     <span class="tool-tag">WAV2VEC2-CORAA</span>
+                     <span class="tool-tag">HUGGING FACE</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-check-circle"></i>
+                 <h4>Validação Levenshtein</h4>
+                 <p>Validação de similaridade entre transcrições com threshold 85%</p>
+                 <div class="feature-tools">
                      <span class="tool-tag">LEVENSHTEIN</span>
+                     <span class="tool-tag">TEXTDISTANCE</span>
+                     <span class="tool-tag">80%</span>
                  </div>
              </div>
              <div class="feature-card">
                  <i class="fas fa-magic"></i>
-                 <h4>Denoiser Final</h4>
+                 <h4>Denoiser</h4>
                  <p>Remove ruído dos áudios validados usando DeepFilterNet3</p>
                  <div class="feature-tools">
                      <span class="tool-tag">DEEPFILTERNET3</span>
                      <span class="tool-tag">AI DENOISING</span>
                      <span class="tool-tag">PYTORCH</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-volume-up"></i>
+                 <h4>Normalização</h4>
+                 <p>Normalização final com Sox para padronização de qualidade</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">SOX</span>
+                     <span class="tool-tag">NORMALIZE</span>
+                     <span class="tool-tag">GAIN</span>
+                 </div>
+             </div>
+             <div class="feature-card">
+                 <i class="fas fa-database"></i>
+                 <h4>Dataset Final</h4>
+                 <p>Áudios processados e salvos em dataset estruturado com nomenclatura padronizada</p>
+                 <div class="feature-tools">
+                     <span class="tool-tag">FLAC</span>
+                     <span class="tool-tag">48KHZ</span>
+                     <span class="tool-tag">STRUCTURED</span>
+                     <span class="tool-tag">MONO</span>
                  </div>
              </div>
          </div>
