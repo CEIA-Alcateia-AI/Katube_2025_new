@@ -6,6 +6,8 @@ import yt_dlp
 from pathlib import Path
 from typing import Optional, Dict, Any
 import logging
+import subprocess
+import sys
 
 from .config import Config
 
@@ -15,6 +17,49 @@ class YouTubeDownloader:
     def __init__(self, output_dir: Optional[Path] = None):
         self.output_dir = output_dir or Config.TEMP_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Configure UTF-8 encoding for subprocesses
+        self._setup_encoding()
+    
+    def _setup_encoding(self):
+        """Configure UTF-8 encoding for subprocesses to handle special characters."""
+        if sys.platform == "win32":
+            # Set environment variables for UTF-8 on Windows
+            os.environ['PYTHONIOENCODING'] = 'utf-8'
+            os.environ['PYTHONUTF8'] = '1'
+            os.environ['LANG'] = 'en_US.UTF-8'
+            os.environ['LC_ALL'] = 'en_US.UTF-8'
+            
+            # Configure subprocess to use UTF-8
+            if hasattr(subprocess, '_default_encoding'):
+                subprocess._default_encoding = 'utf-8'
+            if hasattr(subprocess, '_default_errors'):
+                subprocess._default_errors = 'replace'
+            
+            # Set console code page to UTF-8
+            try:
+                subprocess.run(['chcp', '65001'], shell=True, capture_output=True)
+            except:
+                pass
+    
+    def _sanitize_filename(self, filename: str) -> str:
+        """Sanitize filename to handle UTF-8 characters safely."""
+        import unicodedata
+        import re
+        
+        # Normalize Unicode characters
+        filename = unicodedata.normalize('NFKD', filename)
+        
+        # Replace problematic characters
+        filename = re.sub(r'[^\w\s\-_\.]', '_', filename)
+        
+        # Replace multiple spaces/underscores with single underscore
+        filename = re.sub(r'[\s_]+', '_', filename)
+        
+        # Remove leading/trailing underscores
+        filename = filename.strip('_')
+        
+        return filename
         
     def _get_ydl_opts(self, output_path: str) -> Dict[str, Any]:
         """Get yt-dlp options for highest quality audio download."""
@@ -37,6 +82,10 @@ class YouTubeDownloader:
                 '-ar', str(Config.SAMPLE_RATE),  # Sample rate
                 '-ac', '1',  # Mono
             ],
+            # UTF-8 encoding options
+            'encoding': 'utf-8',
+            'no_warnings': True,
+            'quiet': True,
         }
     
     def download(self, url: str, custom_filename: Optional[str] = None) -> Path:
@@ -51,8 +100,14 @@ class YouTubeDownloader:
             Path to downloaded audio file
         """
         try:
-            # Get video info first
-            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            # Get video info first with UTF-8 encoding
+            ydl_opts_info = {
+                'quiet': True,
+                'encoding': 'utf-8',
+                'no_warnings': True
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
                 info = ydl.extract_info(url, download=False)
                 video_title = info.get('title', 'unknown')
                 video_id = info.get('id', 'unknown')
@@ -64,14 +119,25 @@ class YouTubeDownloader:
             if custom_filename:
                 filename = custom_filename
             else:
-                # Clean filename
-                filename = "".join(c for c in f"{video_id}_{video_title}" if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                filename = filename.replace(' ', '_')[:100]  # Limit length
+                # Clean filename and handle UTF-8 characters
+                filename = self._sanitize_filename(f"{video_id}_{video_title}")
+                filename = filename[:100]  # Limit length
                 
             output_path = str(self.output_dir / f"{filename}.%(ext)s")
             
             # Download with options
             ydl_opts = self._get_ydl_opts(output_path)
+            
+            # Configure environment for UTF-8
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
+            env['PYTHONUTF8'] = '1'
+            env['LANG'] = 'en_US.UTF-8'
+            env['LC_ALL'] = 'en_US.UTF-8'
+            
+            # Add encoding to ydl_opts
+            ydl_opts['encoding'] = 'utf-8'
+            ydl_opts['env'] = env
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])

@@ -74,6 +74,9 @@ def generate_standard_name(base_name: str, stage: str, index: Optional[int] = No
     elif stage == "mos_approved":
         if index is not None:
             name_parts.append(f"_mos_approved_{index:03d}")
+    elif stage == "mos_intermediate":
+        if index is not None:
+            name_parts.append(f"_mos_intermediate_{index:03d}")
     elif stage == "mos_rejected":
         if index is not None:
             name_parts.append(f"_mos_rejected_{index:03d}")
@@ -101,6 +104,12 @@ def generate_standard_name(base_name: str, stage: str, index: Optional[int] = No
     elif stage == "denoised":
         if index is not None:
             name_parts.append(f"_denoised_{index:03d}")
+    elif stage == "sox_normalized":
+        if index is not None:
+            name_parts.append(f"_sox_normalized_{index:03d}")
+    elif stage == "final":
+        if index is not None:
+            name_parts.append(f"_final_{index:03d}")
     
     # Adiciona timestamps se fornecidos
     if timestamps and len(timestamps) == 2:
@@ -129,6 +138,8 @@ def get_stage_from_filename(filename: str) -> str:
         return "chunk"
     elif "_mos_approved_" in filename:
         return "mos_approved"
+    elif "_mos_intermediate_" in filename:
+        return "mos_intermediate"
     elif "_mos_rejected_" in filename:
         return "mos_rejected"
     elif "_diarized_" in filename:
@@ -147,6 +158,10 @@ def get_stage_from_filename(filename: str) -> str:
         return "rejected"
     elif "_denoised_" in filename:
         return "denoised"
+    elif "_sox_normalized_" in filename:
+        return "sox_normalized"
+    elif "_final_" in filename:
+        return "final"
     else:
         return "unknown"
 

@@ -44,7 +44,7 @@ class Config:
     SPEAKERS_DIR = OUTPUT_DIR / "speakers"
     
     # YouTube download settings
-    YOUTUBE_FORMAT = f"bestaudio[ext={AUDIO_FORMAT}]/best[ext={AUDIO_FORMAT}]/bestaudio/best"
+    YOUTUBE_FORMAT = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worst"
     
     # STT preparation settings
     MAX_SEGMENT_SIZE = 25 * 1024 * 1024  # 25MB max per segment for STT

@@ -20,7 +20,9 @@ from .stt_whisper import WhisperSTTTranscriber
 from .stt_wav2vec2 import WAV2VEC2STTTranscriber
 from .audio_normalizer import AudioNormalizer
 from .validation import create_validation_file
+from .marcos_validation.validador_transcricao import create_validation_file as marcos_create_validation_file
 from .denoiser import Denoiser
+from .sox_normalizer import SoxNormalizer
 from .mos_filter import MOSQualityFilter
 
 logger = logging.getLogger(__name__)
@@ -121,6 +123,15 @@ class AudioProcessingPipeline:
         # Initialize denoiser
         self.denoiser = Denoiser(model_name="DeepFilterNet3")
         logger.info("✅ Denoiser (DeepFilterNet3) inicializado com sucesso")
+        
+        # Initialize Sox normalizer for final processing
+        self.sox_normalizer = SoxNormalizer(
+            target_sample_rate=48000,
+            target_format="flac",
+            target_channels=1,
+            normalize_gain=True
+        )
+        logger.info("✅ Sox normalizer inicializado com sucesso")
         
         # Pipeline state
         self.current_session = None
@@ -236,8 +247,11 @@ class AudioProcessingPipeline:
                 'quality_rate': 0.0
             }
         
-        # Apply MOS filter
-        accepted_segments, rejected_segments = self.mos_filter.filter_audio_segments(segment_paths, rejected_dir=rejected_dir)
+        # Apply MOS filter with 3-tier classification
+        approved_segments, intermediate_segments, rejected_segments = self.mos_filter.filter_audio_segments(segment_paths, output_dir=self.session_dir)
+        
+        # For pipeline continuation, use approved segments (≥3.0)
+        accepted_segments = approved_segments
         
         # Generate quality report
         quality_report = self.mos_filter.get_quality_report(segment_paths)
@@ -283,7 +297,11 @@ class AudioProcessingPipeline:
         rejected_completeness_dir.mkdir(exist_ok=True)
         rejected_mos_dir.mkdir(exist_ok=True)
         
-        accepted_segments, rejected_segments = self.mos_filter.filter_audio_segments(segment_paths, rejected_dir=rejected_mos_dir)
+        # Apply MOS filter with 3-tier classification
+        approved_segments, intermediate_segments, rejected_segments = self.mos_filter.filter_audio_segments(segment_paths, output_dir=self.session_dir)
+        
+        # For pipeline continuation, use approved segments (≥3.0)
+        accepted_segments = approved_segments
         
         # Generate quality report
         quality_report = self.mos_filter.get_quality_report(segment_paths)
@@ -739,7 +757,7 @@ class AudioProcessingPipeline:
                 if validation_result.get('success') and validation_result.get('validation_results'):
                     filter_result = self.filter_and_denoise_segments(
                         validation_results=validation_result['validation_results'],
-                        output_dir=stt_output_dir,
+                        output_dir=self.session_dir,  # Use session_dir instead of stt_output_dir
                         similarity_threshold=0.80
                     )
                     combined_results['filter_and_denoise'] = filter_result
@@ -1013,7 +1031,8 @@ class AudioProcessingPipeline:
             logger.info(f"   - Input file 2: {wav2vec2_metadata_file}")
             logger.info(f"   - Output file: {validation_output_file}")
             
-            validation_success = create_validation_file(
+            # Use Marcos validation instead of the old one
+            validation_success = marcos_create_validation_file(
                 input_file1=str(whisper_metadata_file),
                 input_file2=str(wav2vec2_metadata_file),
                 prefix_filepath="",  # Empty prefix as in validation.py
@@ -1123,9 +1142,9 @@ class AudioProcessingPipeline:
         
         try:
             # Create output directories following the desired structure
-            validated_dir = output_dir / 'stt_results' / 'audios_validados_tts'
-            denoised_dir = output_dir / 'stt_results' / 'audios_denoiser'
-            rejected_dir = output_dir / 'stt_results' / 'audio_rejeitado_validacao'
+            validated_dir = output_dir / 'audios_validados_tts'
+            denoised_dir = output_dir / 'audios_denoiser'
+            rejected_dir = output_dir / 'audio_rejeitado_validacao'
             
             validated_dir.mkdir(parents=True, exist_ok=True)
             denoised_dir.mkdir(parents=True, exist_ok=True)
@@ -1139,6 +1158,10 @@ class AudioProcessingPipeline:
                 filename = result['filename']
                 similarity = result['similarity']
                 
+                # Extract base name from validation filename to match with actual audio files
+                # Example: segment_000_stt_001 -> segment_000
+                base_name = self._extract_base_name_for_validation(filename)
+                
                 # Search for the actual audio file in stt_ready subdirectories
                 audio_file = None
                 possible_locations = [
@@ -1147,6 +1170,11 @@ class AudioProcessingPipeline:
                     output_dir / 'stt_ready' / 'speaker_SPEAKER_01',
                     output_dir / 'stt_ready' / 'speaker_SPEAKER_02',
                     output_dir / 'stt_ready' / 'speaker_SPEAKER_03',
+                    # Search in actual speaker directories created by prepare_for_stt
+                    output_dir / 'stt_ready' / 'speaker_00',
+                    output_dir / 'stt_ready' / 'speaker_01',
+                    output_dir / 'stt_ready' / 'speaker_02',
+                    output_dir / 'stt_ready' / 'speaker_03',
                     # Fallback locations
                     output_dir / 'stt_ready',
                     output_dir / 'speakers',
@@ -1157,28 +1185,26 @@ class AudioProcessingPipeline:
                 # Search in each possible location
                 for location in possible_locations:
                     if location.exists():
-                        logger.debug(f"🔍 Searching in: {location}")
-                        # Search for files in this specific location (no recursion needed for speaker folders)
-                        for audio_path in location.glob("*.flac"):
-                            # Normalize both filenames for comparison (remove double underscores)
-                            normalized_filename = filename.replace('__', '_')
-                            normalized_stem = audio_path.stem.replace('__', '_')
-                            
-                            logger.debug(f"  Comparing: '{filename}' vs '{audio_path.stem}'")
-                            logger.debug(f"  Normalized: '{normalized_filename}' vs '{normalized_stem}'")
-                            
-                            # Check if the filename matches (with or without extension)
-                            # Also check if filename is contained in the path name (for speaker-separated files)
-                            if (audio_path.stem == filename or 
-                                audio_path.name == f"{filename}.flac" or
-                                filename in audio_path.stem or
-                                normalized_stem == normalized_filename or
-                                normalized_filename in normalized_stem):
+                        logger.info(f"🔍 Searching in: {location}")
+                        files_found = list(location.glob("*.flac"))
+                        logger.info(f"📁 Found {len(files_found)} FLAC files in {location}")
+                        
+                        # Log first few files for debugging
+                        for i, audio_path in enumerate(files_found[:3]):
+                            logger.info(f"   File {i+1}: {audio_path.name}")
+                        
+                        # Search for files in this specific location
+                        for audio_path in files_found:
+                            logger.debug(f"  Comparing base '{base_name}' with file stem '{audio_path.stem}'")
+                            # Check if the base name matches
+                            if base_name in audio_path.stem:
                                 audio_file = audio_path
-                                logger.info(f"✅ Found audio file: {audio_file}")
+                                logger.info(f"✅ Found audio file: {audio_file} (base: {base_name})")
                                 break
                         if audio_file:
                             break
+                    else:
+                        logger.debug(f"❌ Location does not exist: {location}")
                 
                 if not audio_file:
                     logger.warning(f"⚠️ Could not find audio file for: {filename}")
@@ -1259,6 +1285,20 @@ class AudioProcessingPipeline:
             # Restore original log level
             logger.setLevel(original_level)
             
+            # Collect denoised audio paths for final dataset creation
+            denoised_audio_paths = []
+            logger.info(f"🔍 Coletando caminhos de áudios denoised de {len(validated_segments)} segmentos validados...")
+            for seg in validated_segments:
+                denoised_path = seg['denoised_path']
+                logger.debug(f"   Verificando: {denoised_path}")
+                if denoised_path.exists():
+                    denoised_audio_paths.append(denoised_path)
+                    logger.info(f"   ✅ Encontrado: {denoised_path.name}")
+                else:
+                    logger.warning(f"   ❌ Não encontrado: {denoised_path}")
+            
+            logger.info(f"📊 Total de áudios denoised coletados: {len(denoised_audio_paths)}")
+            
             return {
                 'success': True,
                 'total_segments': len(validation_results),
@@ -1270,12 +1310,33 @@ class AudioProcessingPipeline:
                 'denoised_dir': str(denoised_dir),
                 'rejected_dir': str(rejected_dir),
                 'validated_segments': validated_segments,
-                'rejected_segments': rejected_segments
+                'rejected_segments': rejected_segments,
+                'denoised_audio_paths': denoised_audio_paths
             }
             
         except Exception as e:
             logger.error(f"Error in filtering and denoising: {e}")
             return {"error": str(e)}
+    
+    def _extract_base_name_for_validation(self, filename: str) -> str:
+        """
+        Extract base name from validation filename for matching with actual audio files.
+        
+        Examples:
+        - segment_000_stt_001 -> segment_000
+        - chunk_00_stt_007 -> chunk_00
+        
+        Args:
+            filename: Validation filename with _stt_XXX suffix
+            
+        Returns:
+            Base name without _stt_XXX suffix
+        """
+        # Remove _stt_XXX pattern from the end
+        import re
+        base_name = re.sub(r'_stt_\d+$', '', filename)
+        logger.debug(f"🔍 Extracted base name: '{filename}' -> '{base_name}'")
+        return base_name
     
     def _prepare_for_json(self, obj):
         """Recursively convert Path objects to strings for JSON serialization."""
@@ -1287,6 +1348,222 @@ class AudioProcessingPipeline:
             return [self._prepare_for_json(item) for item in obj]
         else:
             return obj
+    
+    def create_final_dataset(self, denoised_audio_paths: List[Path], stt_results_dir: Path, output_dir: Path) -> Dict[str, Any]:
+        """
+        Cria o dataset final com normalização Sox e transcrições organizadas.
+        
+        Args:
+            denoised_audio_paths: Lista de caminhos dos áudios denoised
+            stt_results_dir: Diretório com resultados STT
+            output_dir: Diretório de saída para o dataset final
+            
+        Returns:
+            Dicionário com resultados da criação do dataset
+        """
+        logger.info("🎯 Criando dataset final com normalização Sox...")
+        
+        # Criar diretórios para o dataset final
+        final_audio_dir = output_dir / "audios_final"
+        final_transcriptions_dir = output_dir / "transcricoes_final"
+        final_audio_dir.mkdir(parents=True, exist_ok=True)
+        final_transcriptions_dir.mkdir(parents=True, exist_ok=True)
+        
+        results = {
+            'successful_normalizations': [],
+            'failed_normalizations': [],
+            'transcription_pairs': [],
+            'total_processed': len(denoised_audio_paths),
+            'success_count': 0,
+            'failure_count': 0
+        }
+        
+        logger.info(f"📁 Diretórios criados:")
+        logger.info(f"   - Áudios finais: {final_audio_dir}")
+        logger.info(f"   - Transcrições finais: {final_transcriptions_dir}")
+        
+        # Processar cada áudio denoised
+        for i, denoised_path in enumerate(denoised_audio_paths):
+            try:
+                logger.info(f"🔄 Processando {i+1}/{len(denoised_audio_paths)}: {denoised_path.name}")
+                
+                # Extrair nome base para nomenclatura final
+                from .naming_utils import extract_base_name, generate_standard_name
+                base_name = extract_base_name(denoised_path)
+                
+                # Remove "_denoised" suffix para nomenclatura limpa
+                if base_name.endswith("_denoised"):
+                    base_name = base_name[:-9]  # Remove "_denoised"
+                
+                # SEMPRE EXECUTAR SOX - Normalizar áudio (24kHz → 48kHz)
+                final_audio_name = generate_standard_name(base_name, "final", i+1)
+                final_audio_path = final_audio_dir / f"{final_audio_name}.flac"
+                
+                logger.info(f"🎵 EXECUTANDO SOX: {denoised_path.name} → {final_audio_path.name}")
+                print(f"🎵 SOX NORMALIZATION: {denoised_path} → {final_audio_path}")
+                
+                normalization_result = self.sox_normalizer.normalize_audio(
+                    input_path=denoised_path,
+                    output_path=final_audio_path
+                )
+                
+                if normalization_result['success']:
+                    results['successful_normalizations'].append(normalization_result)
+                    results['success_count'] += 1
+                    logger.info(f"✅ SOX CONCLUÍDO: {final_audio_path.name}")
+                    print(f"✅ SOX SUCCESS: {final_audio_path}")
+                    
+                    # BUSCAR E COPIAR TRANSCRIÇÕES STT (Whisper + WAV2VEC2)
+                    logger.info(f"📝 Buscando transcrições STT para: {base_name}")
+                    transcription_files = self._find_transcription_files(base_name, stt_results_dir)
+                    
+                    if transcription_files:
+                        # Copiar transcrições para pasta final
+                        final_transcriptions = self._copy_transcriptions_to_final(
+                            transcription_files, 
+                            final_transcriptions_dir, 
+                            final_audio_name
+                        )
+                        
+                        results['transcription_pairs'].append({
+                            'audio_file': str(final_audio_path),
+                            'transcriptions': final_transcriptions,
+                            'base_name': base_name
+                        })
+                        
+                        logger.info(f"✅ {final_audio_path.name} + {len(final_transcriptions)} transcrições copiadas")
+                        print(f"📝 TRANSCRIPTIONS COPIED: {len(final_transcriptions)} files for {final_audio_path.name}")
+                    else:
+                        logger.warning(f"⚠️ Nenhuma transcrição encontrada para {base_name}")
+                        print(f"⚠️ NO TRANSCRIPTIONS FOUND for {base_name}")
+                        
+                else:
+                    results['failed_normalizations'].append({
+                        'input_path': str(denoised_path),
+                        'error': normalization_result['error']
+                    })
+                    results['failure_count'] += 1
+                    logger.error(f"❌ SOX FALHOU: {normalization_result['error']}")
+                    print(f"❌ SOX FAILED: {normalization_result['error']}")
+                    
+            except Exception as e:
+                error_msg = f"Erro no processamento de {denoised_path.name}: {str(e)}"
+                results['failed_normalizations'].append({
+                    'input_path': str(denoised_path),
+                    'error': error_msg
+                })
+                results['failure_count'] += 1
+                logger.error(f"❌ {error_msg}")
+        
+        # Estatísticas finais
+        logger.info(f"🎯 Dataset final criado:")
+        logger.info(f"   ✅ Sucessos: {results['success_count']}")
+        logger.info(f"   ❌ Falhas: {results['failure_count']}")
+        logger.info(f"   📝 Pares áudio-transcrição: {len(results['transcription_pairs'])}")
+        logger.info(f"   📁 Localização: {output_dir}")
+        
+        return results
+    
+    def _find_transcription_files(self, base_name: str, stt_results_dir: Path) -> List[Path]:
+        """
+        Busca arquivos de transcrição correspondentes a um áudio.
+        
+        Args:
+            base_name: Nome base do arquivo de áudio (ex: segment_000_stt_001)
+            stt_results_dir: Diretório com resultados STT
+            
+        Returns:
+            Lista de caminhos dos arquivos de transcrição encontrados
+        """
+        transcription_files = []
+        
+        # Buscar em subdiretórios de STT (whisper e wav2vec2) - caminhos corretos
+        stt_directories = [
+            stt_results_dir / "STT-whisper",
+            stt_results_dir / "STT-wav2vec2"
+        ]
+        
+        logger.info(f"🔍 Buscando transcrições para base_name: {base_name}")
+        
+        for stt_dir in stt_directories:
+            logger.info(f"📁 Verificando diretório: {stt_dir}")
+            
+            if stt_dir.exists():
+                # Listar todos os arquivos .txt no diretório
+                txt_files = list(stt_dir.glob("*.txt"))
+                logger.info(f"   Encontrados {len(txt_files)} arquivos .txt")
+                
+                for txt_file in txt_files:
+                    logger.debug(f"   Verificando arquivo: {txt_file.name}")
+                    
+                    # Verificar se o nome base está no nome do arquivo
+                    if base_name in txt_file.stem or txt_file.stem.startswith(base_name):
+                        transcription_files.append(txt_file)
+                        logger.info(f"   ✅ MATCH: {txt_file.name}")
+                    else:
+                        logger.debug(f"   ❌ No match: {txt_file.stem} != {base_name}")
+            else:
+                logger.warning(f"   ❌ Diretório não existe: {stt_dir}")
+        
+        logger.info(f"📝 Total de transcrições encontradas: {len(transcription_files)}")
+        for tf in transcription_files:
+            logger.info(f"   - {tf}")
+        
+        return transcription_files
+    
+    def _copy_transcriptions_to_final(self, transcription_files: List[Path], final_transcriptions_dir: Path, final_audio_name: str) -> List[Dict[str, str]]:
+        """
+        Copia arquivos de transcrição para o diretório final com nomenclatura padronizada.
+        
+        Args:
+            transcription_files: Lista de arquivos de transcrição
+            final_transcriptions_dir: Diretório final para transcrições
+            final_audio_name: Nome do áudio final (sem extensão)
+            
+        Returns:
+            Lista de dicionários com informações das transcrições copiadas
+        """
+        final_transcriptions = []
+        
+        logger.info(f"📄 Copiando {len(transcription_files)} transcrições para: {final_transcriptions_dir}")
+        
+        for i, transcription_file in enumerate(transcription_files):
+            try:
+                # Determinar tipo de STT pelo nome do arquivo ou diretório pai
+                if 'whisper' in transcription_file.parent.name.lower():
+                    stt_type = 'whisper'
+                elif 'wav2vec2' in transcription_file.parent.name.lower():
+                    stt_type = 'wav2vec2'
+                else:
+                    stt_type = 'unknown'
+                
+                # Nome padronizado para transcrição final
+                final_transcription_name = f"{final_audio_name}_{stt_type}.txt"
+                final_transcription_path = final_transcriptions_dir / final_transcription_name
+                
+                logger.info(f"📄 Copiando {stt_type}: {transcription_file.name} → {final_transcription_name}")
+                print(f"📄 COPYING TRANSCRIPTION: {transcription_file} → {final_transcription_path}")
+                
+                # Copiar arquivo
+                import shutil
+                shutil.copy2(transcription_file, final_transcription_path)
+                
+                final_transcriptions.append({
+                    'type': stt_type,
+                    'original_path': str(transcription_file),
+                    'final_path': str(final_transcription_path),
+                    'filename': final_transcription_name
+                })
+                
+                logger.info(f"✅ Transcrição {stt_type} copiada: {final_transcription_name}")
+                
+            except Exception as e:
+                logger.error(f"❌ Erro ao copiar transcrição {transcription_file}: {e}")
+                print(f"❌ TRANSCRIPTION COPY FAILED: {transcription_file} - {e}")
+        
+        logger.info(f"📄 Total de transcrições copiadas: {len(final_transcriptions)}")
+        
+        return final_transcriptions
 
 
 # Example usage

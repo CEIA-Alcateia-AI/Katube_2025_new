@@ -15,6 +15,8 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="torch.nn.utils
 # Suppress specific deprecation warnings
 warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*")
 warnings.filterwarnings("ignore", message=".*torchaudio._backend.*deprecated.*")
+warnings.filterwarnings("ignore", message=".*torchaudio.backend.common.*moved.*")
+warnings.filterwarnings("ignore", message=".*torchaudio.backend.common.AudioMetaData.*moved.*")
 warnings.filterwarnings("ignore", message=".*speechbrain.pretrained.*deprecated.*")
 warnings.filterwarnings("ignore", message=".*torch.nn.utils.weight_norm.*deprecated.*")
 

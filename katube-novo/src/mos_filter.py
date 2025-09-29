@@ -96,13 +96,19 @@ class MOSQualityFilter:
             if self.predictor is None:
                 raise RuntimeError("❌ Filtro MOS não foi inicializado corretamente")
             
+            # Check if file exists first
+            if not audio_path.exists():
+                logger.error(f"❌ Arquivo não encontrado: {audio_path}")
+                return 1.0  # Return low score for missing files
+            
             # SEMPRE usar SHEET predictor (obrigatório)
             return self.predictor.predict(wav_path=str(audio_path))
                 
         except Exception as e:
             logger.error(f"❌ ERRO ao predizer MOS para {audio_path.name}: {e}")
             logger.error("🔧 Verifique se PyTorch está instalado: pip install torch torchaudio")
-            raise RuntimeError(f"Falha na predição MOS (obrigatória): {e}")
+            # Return low score instead of raising exception to continue pipeline
+            return 1.0
     
     def _simple_quality_assessment(self, audio_path: Path) -> float:
         """
@@ -176,29 +182,44 @@ class MOSQualityFilter:
     
     def _load_audio_flexible(self, audio_path: Path) -> Tuple[Optional[np.ndarray], int]:
         """Load audio using multiple methods as fallback."""
+        # Check if file exists first
+        if not audio_path.exists():
+            logger.error(f"❌ Arquivo não encontrado: {audio_path}")
+            return None, 0
+        
+        # Check if file is empty or too small
+        try:
+            file_size = audio_path.stat().st_size
+            if file_size < 1024:  # Less than 1KB
+                logger.error(f"❌ Arquivo muito pequeno ou vazio: {audio_path} ({file_size} bytes)")
+                return None, 0
+        except Exception as e:
+            logger.error(f"❌ Erro ao verificar tamanho do arquivo {audio_path}: {e}")
+            return None, 0
+            
         try:
             # Try torchaudio first
             if torch is not None:
                 waveform, sr = torchaudio.load(str(audio_path))
                 return waveform.squeeze().numpy(), sr
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Torchaudio failed for {audio_path.name}: {e}")
         
         try:
             # Try librosa as fallback
             import librosa
             audio, sr = librosa.load(str(audio_path), sr=None)
             return audio, sr
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Librosa failed for {audio_path.name}: {e}")
         
         try:
             # Try soundfile as last resort
             import soundfile as sf
             audio, sr = sf.read(str(audio_path))
             return audio, sr
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Soundfile failed for {audio_path.name}: {e}")
         
         return None, 0
     
@@ -298,22 +319,32 @@ class MOSQualityFilter:
         except:
             return 2000.0  # Default speech-like centroid
     
-    def filter_audio_segments(self, segment_paths: List[Path], rejected_dir: Optional[Path] = None) -> Tuple[List[Path], List[Path]]:
+    def filter_audio_segments(self, segment_paths: List[Path], output_dir: Optional[Path] = None) -> Tuple[List[Path], List[Path], List[Path]]:
         """
-        Filter audio segments based on MOS quality scores.
+        Filter audio segments based on MOS quality scores into three categories.
         
         Args:
             segment_paths: List of audio segment paths
-            rejected_dir: Directory to save rejected segments (optional)
+            output_dir: Base directory to save categorized segments (optional)
             
         Returns:
-            Tuple of (accepted_segments, rejected_segments)
+            Tuple of (approved_segments, intermediate_segments, rejected_segments)
         """
-        accepted_segments = []
+        approved_segments = []
+        intermediate_segments = []
         rejected_segments = []
-        rejected_files = []
         
-        logger.info(f"🔍 Filtering {len(segment_paths)} audio segments (MOS threshold: {self.mos_threshold})")
+        # Create output directories
+        if output_dir:
+            approved_dir = output_dir / "audios_acima_3,0_MOS"
+            intermediate_dir = output_dir / "audios_entre_2,5_e_3,0_MOS"
+            rejected_dir = output_dir / "audios_abaixo_2,5_MOS"
+            
+            approved_dir.mkdir(parents=True, exist_ok=True)
+            intermediate_dir.mkdir(parents=True, exist_ok=True)
+            rejected_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"🔍 Filtering {len(segment_paths)} audio segments with 3-tier MOS classification")
         
         for i, segment_path in enumerate(segment_paths):
             try:
@@ -322,28 +353,70 @@ class MOSQualityFilter:
                 
                 logger.info(f"📊 {segment_path.name}: MOS = {mos_score:.2f}")
                 
-                if mos_score >= self.mos_threshold:
-                    accepted_segments.append(segment_path)
-                    logger.info(f"✅ Accepted: {segment_path.name} (MOS: {mos_score:.2f})")
-                else:
-                    rejected_segments.append(segment_path)
-                    logger.warning(f"❌ Rejected: {segment_path.name} (MOS: {mos_score:.2f} < {self.mos_threshold})")
+                # Import naming utilities
+                from .naming_utils import extract_base_name, generate_standard_name
+                
+                # Extract base name and create standardized filename
+                base_name = extract_base_name(segment_path)
+                
+                if mos_score >= 3.0:
+                    # Aprovados - acima de 3,0
+                    approved_segments.append(segment_path)
+                    logger.info(f"✅ Approved: {segment_path.name} (MOS: {mos_score:.2f})")
                     
-                    # Save rejected segment to rejected directory
-                    if rejected_dir:
+                    if output_dir:
                         try:
-                            rejected_dir.mkdir(parents=True, exist_ok=True)
-                            rejected_filename = f"mos_rejected_{mos_score:.2f}_{segment_path.name}"
+                            # Create filename with MOS score: [base_name]_mos_3,5_approved_001.flac
+                            mos_str = f"{mos_score:.1f}".replace('.', ',')
+                            standard_name = generate_standard_name(base_name, "mos_approved", i+1)
+                            approved_filename = f"{standard_name}_{mos_str}.flac"
+                            approved_path = approved_dir / approved_filename
+                            
+                            # Copy the approved file
+                            import shutil
+                            shutil.copy2(segment_path, approved_path)
+                            logger.debug(f"📁 Saved approved segment: {approved_filename}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Could not save approved segment {segment_path.name}: {e}")
+                            
+                elif mos_score >= 2.5:
+                    # Intermediários - de 2,5 até 3,0
+                    intermediate_segments.append(segment_path)
+                    logger.info(f"🟡 Intermediate: {segment_path.name} (MOS: {mos_score:.2f})")
+                    
+                    if output_dir:
+                        try:
+                            # Create filename with MOS score: [base_name]_mos_2,8_intermediate_001.flac
+                            mos_str = f"{mos_score:.1f}".replace('.', ',')
+                            standard_name = generate_standard_name(base_name, "mos_intermediate", i+1)
+                            intermediate_filename = f"{standard_name}_{mos_str}.flac"
+                            intermediate_path = intermediate_dir / intermediate_filename
+                            
+                            # Copy the intermediate file
+                            import shutil
+                            shutil.copy2(segment_path, intermediate_path)
+                            logger.debug(f"📁 Saved intermediate segment: {intermediate_filename}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Could not save intermediate segment {segment_path.name}: {e}")
+                else:
+                    # Ruins - abaixo de 2,5
+                    rejected_segments.append(segment_path)
+                    logger.warning(f"❌ Rejected: {segment_path.name} (MOS: {mos_score:.2f} < 2.5)")
+                    
+                    if output_dir:
+                        try:
+                            # Create filename with MOS score: [base_name]_mos_2,1_rejected_001.flac
+                            mos_str = f"{mos_score:.1f}".replace('.', ',')
+                            standard_name = generate_standard_name(base_name, "mos_rejected", i+1)
+                            rejected_filename = f"{standard_name}_{mos_str}.flac"
                             rejected_path = rejected_dir / rejected_filename
                             
                             # Copy the rejected file
                             import shutil
                             shutil.copy2(segment_path, rejected_path)
-                            rejected_files.append(rejected_path)
-                            
-                            logger.debug(f"📁 Saved MOS rejected segment: {rejected_filename}")
+                            logger.debug(f"📁 Saved rejected segment: {rejected_filename}")
                         except Exception as e:
-                            logger.warning(f"⚠️ Could not save MOS rejected segment {segment_path.name}: {e}")
+                            logger.warning(f"⚠️ Could not save rejected segment {segment_path.name}: {e}")
                 
                 # Progress logging
                 if (i + 1) % 10 == 0:
@@ -354,23 +427,23 @@ class MOSQualityFilter:
                 rejected_segments.append(segment_path)
                 
                 # Save error segment to rejected directory
-                if rejected_dir:
+                if output_dir:
                     try:
                         rejected_dir.mkdir(parents=True, exist_ok=True)
-                        rejected_filename = f"mos_error_{segment_path.name}"
-                        rejected_path = rejected_dir / rejected_filename
+                        error_filename = f"mos_error_{segment_path.name}"
+                        error_path = rejected_dir / error_filename
                         
                         import shutil
-                        shutil.copy2(segment_path, rejected_path)
-                        rejected_files.append(rejected_path)
+                        shutil.copy2(segment_path, error_path)
                     except Exception as e:
                         logger.warning(f"⚠️ Could not save MOS error segment {segment_path.name}: {e}")
         
-        logger.info(f"🎯 Filtering complete: {len(accepted_segments)} accepted, {len(rejected_segments)} rejected")
-        if rejected_files:
-            logger.info(f"📁 MOS rejected files saved: {len(rejected_files)}")
+        logger.info(f"🎯 3-tier filtering complete:")
+        logger.info(f"   ✅ Approved (≥3.0): {len(approved_segments)}")
+        logger.info(f"   🟡 Intermediate (2.5-3.0): {len(intermediate_segments)}")
+        logger.info(f"   ❌ Rejected (<2.5): {len(rejected_segments)}")
         
-        return accepted_segments, rejected_segments
+        return approved_segments, intermediate_segments, rejected_segments
     
     def get_quality_report(self, segment_paths: List[Path]) -> dict:
         """
