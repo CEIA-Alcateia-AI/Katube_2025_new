@@ -2,6 +2,9 @@
 """
 Flask web interface for YouTube Audio Processing Pipeline
 """
+# Suppress warnings first
+from src.warning_suppression import *
+
 import os
 import sys
 import json
@@ -21,7 +24,8 @@ from src.pipeline import AudioProcessingPipeline
 from src.config import Config
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this'
+import secrets
+app.secret_key = secrets.token_urlsafe(32)
 
 # Global variables for job tracking
 active_jobs = {}
@@ -71,6 +75,7 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
         # Create pipeline
         pipeline = AudioProcessingPipeline(
             output_base_dir=Config.OUTPUT_DIR,
+            huggingface_token=os.getenv('HUGGINGFACE_TOKEN'),
             segment_min_duration=options.get('min_duration', 10.0),
             segment_max_duration=options.get('max_duration', 15.0)
         )
@@ -84,25 +89,56 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
         
         # Download
         audio_path = pipeline.download_youtube_audio(url, options.get('filename'))
+        job.update("normalizing", 20, "Normalizando áudio (FLAC, 24kHz, Mono)...")
         job.update("segmenting", 25, "Segmentando áudio...")
         
         # Segment
         segments = pipeline.segment_audio(audio_path, options.get('intelligent_segmentation', True))
-        job.update("diarizing", 40, "Realizando diarização de locutores...")
+        job.update("filtering", 30, "Aplicando filtros de qualidade...")
         
-        # Diarization
+        # Apply completeness filter (DISABLED - moved to separate file)
+        # Completeness filter is now in src/audio_completeness_filter.py
+        # if pipeline.enable_completeness_filter:
+        #     completeness_rejected_dir = session_dir / 'audio_descartado_completude'
+        #     completeness_result = pipeline.apply_completeness_filter(segments, rejected_dir=completeness_rejected_dir)
+        #     segments = completeness_result['complete_segments']
+        #     job.update("filtering", 35, f"Filtro completude: {len(segments)} segmentos aprovados")
+        
+        # Apply MOS filter
+        if pipeline.enable_mos_filter:
+            mos_rejected_dir = session_dir / 'audio_descartado_mos'
+            mos_result = pipeline.apply_mos_filter(segments, rejected_dir=mos_rejected_dir)
+            segments = mos_result['filtered_segments']
+            job.update("filtering", 40, f"Filtro MOS: {len(segments)} segmentos aprovados")
+            
+            # Move approved segments to segments_aprovados immediately after MOS filter
+            segments_aprovados_dir = session_dir / 'segments_aprovados'
+            segments_aprovados_dir.mkdir(exist_ok=True)
+            
+            approved_segments = []
+            for segment in segments:
+                approved_path = segments_aprovados_dir / segment.name
+                import shutil
+                shutil.copy2(segment, approved_path)
+                approved_segments.append(approved_path)
+            
+            # Update segments to point to approved location
+            segments = approved_segments
+        
+        # Diarization (ANTES do STT)
+        job.update("diarizing", 50, "Executando diarização...")
         diarization_results = pipeline.perform_diarization(segments, options.get('num_speakers'))
-        job.update("detecting", 60, "Detectando sobreposições de voz...")
         
-        # Overlap detection
+        # Overlap detection (ANTES do STT)
+        job.update("overlap", 60, "Detectando sobreposições...")
         clean_segments, overlapping_segments = pipeline.detect_overlaps(segments)
-        job.update("separating", 80, "Separando áudios por locutor...")
         
-        # Speaker separation
+        # Speaker separation (ANTES do STT)
+        job.update("separating", 70, "Separando por locutor...")
         separation_results = pipeline.separate_speakers(diarization_results, options.get('enhance_audio', True))
-        job.update("preparing", 95, "Preparando arquivos para STT...")
         
-        # STT preparation
+        # STT preparation (ANTES do STT)
+        job.update("preparing", 75, "Preparando arquivos para STT...")
         stt_files = pipeline.prepare_for_stt(separation_results)
 
         # Step 7: Denoising
@@ -110,6 +146,56 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
         # Denosar todos os segmentos (substitua `all_segments_to_denoise` pelo que você já definiu na pipeline)
         denoised_segments = pipeline.denoise_segments(segments)
         job.update("denoising", 99, f"Denoised {len(denoised_segments)} segments")
+        
+        # Apply STT transcription
+        if pipeline.enable_stt:
+            # Convert stt_files dict to a flat list of all files
+            if stt_files:
+                all_stt_files = []
+                for speaker_files in stt_files.values():
+                    all_stt_files.extend(speaker_files)
+                stt_result = pipeline.transcribe_audio_segments(all_stt_files)
+            else:
+                stt_result = pipeline.transcribe_audio_segments(segments)
+            validation_info = ""
+            filter_info = ""
+            
+            if 'validation' in stt_result and stt_result['validation'].get('success'):
+                avg_sim = stt_result['validation'].get('average_similarity', 0)
+                validation_info = f" (Validação: {avg_sim:.3f} similaridade)"
+            
+            if 'filter_and_denoise' in stt_result and stt_result['filter_and_denoise'].get('success'):
+                validated_count = stt_result['filter_and_denoise'].get('validated_count', 0)
+                denoised_count = stt_result['filter_and_denoise'].get('denoised_count', 0)
+                filter_info = f" | Filtro 80%: {validated_count} validados, {denoised_count} denoised"
+            
+            job.update("filtering", 85, f"STT: {stt_result.get('whisper_count', 0)} Whisper + {stt_result.get('wav2vec2_count', 0)} WAV2VEC2{validation_info}{filter_info}")
+            
+            # Final dataset creation with Sox normalization
+            if 'filter_and_denoise' in stt_result and stt_result['filter_and_denoise'].get('success'):
+                job.update("finalizing", 90, "Criando dataset final com normalização Sox...")
+                
+                # Get denoised audio paths
+                denoised_audio_paths = stt_result['filter_and_denoise'].get('denoised_audio_paths', [])
+                print(f"🔍 DEBUG: denoised_audio_paths = {len(denoised_audio_paths)} arquivos")
+                for i, path in enumerate(denoised_audio_paths[:3]):  # Show first 3
+                    print(f"   {i+1}: {path}")
+                
+                if denoised_audio_paths:
+                    print(f"✅ Iniciando create_final_dataset com {len(denoised_audio_paths)} arquivos")
+                    # Create final dataset
+                    final_dataset_result = pipeline.create_final_dataset(
+                        denoised_audio_paths=denoised_audio_paths,
+                        stt_results_dir=session_dir / 'stt_results',
+                        output_dir=session_dir
+                    )
+                    
+                    job.update("finalizing", 95, f"Dataset final: {final_dataset_result['success_count']} áudios normalizados")
+                else:
+                    print("❌ denoised_audio_paths está vazio! SOX não será executado.")
+                    final_dataset_result = {'success_count': 0, 'failure_count': 0}
+            else:
+                final_dataset_result = {'success_count': 0, 'failure_count': 0}
         
         # Complete results
         processing_time = time.time() - job.start_time.timestamp()
@@ -121,18 +207,29 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
             'processing_time': processing_time,
             'downloaded_audio': str(audio_path),
             'num_segments': len(segments),
+<<<<<<< HEAD
             'num_clean_segments': len(clean_segments),
             'num_overlapping_segments': len(overlapping_segments),
             'stt_ready_files': stt_files,
             'denoised_segments': [str(p) for p in denoised_segments],
             'statistics': pipeline._generate_statistics(stt_files, separation_results)
+=======
+            'num_clean_segments': len(clean_segments) if 'clean_segments' in locals() else 0,
+            'num_overlapping_segments': len(overlapping_segments) if 'overlapping_segments' in locals() else 0,
+            'diarization_results': diarization_results if 'diarization_results' in locals() else {},
+            'separation_results': separation_results if 'separation_results' in locals() else {},
+            'stt_ready_files': stt_files if 'stt_files' in locals() else [],
+            'stt_results': stt_result if 'stt_result' in locals() else {},
+            'final_dataset_results': final_dataset_result if 'final_dataset_result' in locals() else {}
+>>>>>>> main
         }
         
         # Save results to JSON
         results_file = session_dir / 'pipeline_results.json'
         with open(results_file, 'w') as f:
-            json_results = pipeline._prepare_for_json(results)
-            json.dump(json_results, f, indent=2, ensure_ascii=False)
+            # Simple JSON serialization for results
+            import json
+            json.dump(results, f, indent=2, ensure_ascii=False, default=str)
         
         job.complete(results)
         
@@ -144,6 +241,148 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
 def index():
     """Main page"""
     return render_template('index.html')
+
+@app.route('/process_channel', methods=['POST'])
+def process_channel():
+    """Process entire YouTube channel."""
+    try:
+        data = request.get_json()
+        channel_url = data.get('channelUrl') or data.get('channel_url')
+        
+        # Validate URL (accept both channel and video URLs)
+        if not channel_url:
+            return jsonify({'error': 'URL is required'}), 400
+        
+        # Check if it's a channel URL or video URL
+        is_channel = any(pattern in channel_url.lower() for pattern in [
+            '/channel/', '/c/', '/user/', '/@', '/playlist?'
+        ])
+        
+        if not is_channel and 'youtube.com/watch' not in channel_url.lower() and 'youtu.be/' not in channel_url.lower():
+            return jsonify({'error': 'Please provide a valid YouTube channel or video URL'}), 400
+        
+        # Generate job ID
+        job_id = str(uuid.uuid4())
+        
+        # Start background job using threading
+        job_thread = threading.Thread(
+            target=process_channel_background,
+            args=(job_id, channel_url)
+        )
+        job_thread.daemon = True
+        job_thread.start()
+        
+        # Store job status
+        with job_lock:
+            active_jobs[job_id] = JobStatus(job_id, channel_url)
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'started',
+            'message': 'Channel processing started'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error starting channel processing: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def process_channel_background(job_id, url):
+    """Background job to process YouTube channel or single video."""
+    try:
+        logger.info(f"🔄 Starting processing: {url}")
+        
+        # Check if it's a channel URL or video URL
+        is_channel = any(pattern in url.lower() for pattern in [
+            '/channel/', '/c/', '/user/', '/@', '/playlist?'
+        ])
+        
+        # Update job status
+        with job_lock:
+            if job_id in active_jobs:
+                if is_channel:
+                    active_jobs[job_id].update('downloading', 10, 'Iniciando processamento do canal...')
+                else:
+                    active_jobs[job_id].update('downloading', 10, 'Iniciando processamento do vídeo...')
+        
+        # Initialize pipeline with MOS filter (OBRIGATÓRIO)
+        pipeline = AudioProcessingPipeline(
+            huggingface_token=os.getenv('HUGGINGFACE_TOKEN'),
+            mos_threshold=2.0
+        )
+        
+        processed_count = 0
+        failed_count = 0
+        
+        def progress_callback(video_url, success, total_videos, current_index):
+            """Update progress for each video processed."""
+            nonlocal processed_count, failed_count
+            
+            with job_lock:
+                if job_id in active_jobs:
+                    job = active_jobs[job_id]
+                    
+                    # Always count as processed (success) since we're processing all videos
+                    processed_count += 1
+                    
+                    # Extract video ID for display
+                    video_id = video_url.split('watch?v=')[-1].split('&')[0] if 'watch?v=' in video_url else video_url[-11:]
+                    
+                    # Show progress as "Video X of Y" format
+                    status = f"📹 Vídeo {current_index}/{total_videos} processado"
+                    
+                    # Calculate progress percentage based on actual total
+                    progress_percent = min(90, int((current_index / total_videos) * 90))
+                    
+                    job.update('processing', progress_percent, 
+                             f'Processando canal... {status} | ID: {video_id}')
+        
+        # Process based on URL type
+        if is_channel:
+            # Process entire channel
+            result = pipeline.process_youtube_channel(url, max_videos=2500, progress_callback=progress_callback)
+            
+            # Update final job status
+            with job_lock:
+                if job_id in active_jobs:
+                    if result.get('success', False):
+                        total_videos = result.get('total_videos', 0)
+                        processed = result.get('videos_processed', 0)
+                        failed = result.get('videos_failed', 0)
+                        active_jobs[job_id].update('completed', 100, f'✅ Canal processado! {processed}/{total_videos} vídeos')
+                    else:
+                        active_jobs[job_id].update('failed', 0, f'❌ Erro no canal: {result.get("error", "Erro desconhecido")}')
+                    active_jobs[job_id].results = result
+            
+            logger.info(f"✅ Channel processing complete: {result}")
+        else:
+            # Process single video
+            result = pipeline.process_single_video(url)
+            
+            # Update final job status
+            with job_lock:
+                if job_id in active_jobs:
+                    if result.get('success', False):
+                        segments_count = result.get('segments_count', 0)
+                        speakers_count = result.get('speakers_count', 0)
+                        active_jobs[job_id].update('completed', 100, f'✅ Vídeo processado! {segments_count} segmentos, {speakers_count} falantes')
+                    else:
+                        active_jobs[job_id].update('failed', 0, f'❌ Erro no vídeo: {result.get("error", "Erro desconhecido")}')
+                    active_jobs[job_id].results = result
+            
+            logger.info(f"✅ Video processing complete: {result}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Channel processing failed: {e}")
+        
+        # Update job status with error
+        with job_lock:
+            if job_id in active_jobs:
+                active_jobs[job_id].update('failed', 0, f'Erro: {str(e)}')
+                active_jobs[job_id].error = str(e)
+        
+        return {'success': False, 'error': str(e)}
 
 @app.route('/process', methods=['POST'])
 def process_url():
@@ -222,11 +461,28 @@ def get_result(job_id):
         if job.status != 'completed':
             return jsonify({'error': 'Job ainda não foi concluído'}), 400
         
+        # Clean results for JSON serialization
+        def clean_for_json(obj):
+            if isinstance(obj, dict):
+                return {k: clean_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [clean_for_json(item) for item in obj]
+            elif hasattr(obj, '__module__') and 'pyannote' in str(obj.__module__):
+                return f"pyannote.{obj.__class__.__name__}"  # Handle pyannote objects
+            elif hasattr(obj, '__dict__'):
+                return str(obj)  # Convert complex objects to string
+            elif isinstance(obj, (str, int, float, bool, type(None))):
+                return obj
+            elif hasattr(obj, '__class__'):
+                return f"{obj.__class__.__module__}.{obj.__class__.__name__}"  # Better class representation
+            else:
+                return str(obj)  # Convert anything else to string
+        
         return jsonify({
             'job_id': job.job_id,
             'status': job.status,
-            'results': job.results,
-            'processing_time': (job.end_time - job.start_time).total_seconds()
+            'results': clean_for_json(job.results),
+            'processing_time': (job.end_time - job.start_time).total_seconds() if job.end_time and job.start_time else 0
         })
 
 @app.route('/results/<job_id>')
@@ -310,14 +566,37 @@ def list_jobs():
     return jsonify(jobs_info)
 
 if __name__ == '__main__':
+    
     # Ensure directories exist
     Config.create_directories()
     
     # Create additional directories
     Config.AUDIOS_BAIXADOS_DIR.mkdir(parents=True, exist_ok=True)
     
-    print("🚀 Starting YouTube Audio Processing Web Interface")
-    print(f"📁 Output directory: {Config.OUTPUT_DIR}")
-    print("🌐 Open http://localhost:5000 in your browser")
+    print("🚀 YouTube Audio Processing Pipeline - Web Interface")
+    print("============================================================")
+    print("📁 Processamento local - Arquivos salvos no disco")
+    print("🎯 Aceita: Canais YouTube OU vídeos individuais")
+    print("🔍 Pipeline: Download → Normalização → Segmentação → MOS → Diarização → OSD → Separação → STT → Validação → Denoiser → Normalização Final → Dataset")
+    print("🌐 Acesse: http://localhost:5000")
+    print("============================================================")
+    print()
+    print("Recursos disponíveis:")
+    print("• Download direto do YouTube em FLAC 24kHz Mono")
+    print("• Normalização de áudio com FFmpeg")
+    print("• Segmentação natural baseada em pausas da fala (10s-1min)")
+    print("• Filtro de qualidade MOS (3-tier: ≥3.0, 2.5-3.0, <2.5)")
+    print("• Diarização com pyannote.audio 3.1")
+    print("• Detecção de sobreposição de vozes (OSD) com pyannote/segmentation-3.0")
+    print("• Separação por locutor")
+    print("• STT dual: Distil-Whisper + WAV2VEC2-CORAA")
+    print("• Validação STT com Levenshtein (80% threshold)")
+    print("• Denoiser com DeepFilterNet3")
+    print("• Normalização final com Sox")
+    print("• Dataset final com nomenclatura padronizada")
+    print("• Todos os arquivos salvos localmente")
+    print()
+    print("Pressione Ctrl+C para parar o servidor")
+    print("============================================================")
     
     app.run(debug=True, host='0.0.0.0', port=5000)

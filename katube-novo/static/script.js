@@ -448,6 +448,226 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+/**
+ * Process YouTube channel
+ * @param {string} channelUrl 
+ */
+async function processChannel(channelUrl) {
+    try {
+        showToast('Iniciando processamento do canal...', 'info');
+        
+        const response = await fetch('/process_channel', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                channel_url: channelUrl
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.job_id) {
+            showToast('Processamento do canal iniciado!', 'success');
+            monitorJob(data.job_id, 'channel');
+        } else {
+            showToast(data.error || 'Erro ao iniciar processamento', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error processing channel:', error);
+        showToast('Erro na comunicação com o servidor', 'error');
+    }
+}
+
+/**
+ * Process single YouTube video
+ * @param {string} videoUrl 
+ */
+async function processVideo(videoUrl) {
+    try {
+        showToast('Iniciando processamento do vídeo...', 'info');
+        
+        // Get form data
+        const formData = {
+            url: videoUrl,
+            filename: document.getElementById('filename')?.value || '',
+            session_name: document.getElementById('session_name')?.value || '',
+            num_speakers: document.getElementById('num_speakers')?.value || null,
+            mos_threshold: parseFloat(document.getElementById('mos_threshold')?.value) || 2.0,
+            enable_mos_filter: true,  // Sempre habilitado (obrigatório)
+            min_duration: parseFloat(document.getElementById('min_duration')?.value) || 10.0,
+            max_duration: parseFloat(document.getElementById('max_duration')?.value) || 15.0
+        };
+        
+        const response = await fetch('/process', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.job_id) {
+            showToast('Processamento iniciado!', 'success');
+            monitorJob(data.job_id, 'video');
+        } else {
+            showToast(data.error || 'Erro ao iniciar processamento', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error processing video:', error);
+        showToast('Erro na comunicação com o servidor', 'error');
+    }
+}
+
+/**
+ * Monitor job progress
+ * @param {string} jobId 
+ * @param {string} type 
+ */
+async function monitorJob(jobId, type = 'video') {
+    const statusDiv = document.getElementById('status');
+    const progressSection = document.getElementById('progressSection');
+    
+    // Show progress section
+    if (progressSection) {
+        progressSection.classList.remove('hidden');
+    }
+    
+    if (statusDiv) {
+        statusDiv.classList.add('hidden');
+    }
+    
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    const checkStatus = async () => {
+        try {
+            const response = await fetch(`/status/${jobId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                // Add timeout to prevent hanging
+                signal: AbortSignal.timeout(10000) // 10 second timeout
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Reset retry count on successful response
+            retryCount = 0;
+            
+            // Update progress bar if function exists
+            if (typeof updateProgress === 'function') {
+                updateProgress(data.status, data.progress, data.message);
+            }
+            
+            if (data.status === 'finished' || data.status === 'completed') {
+                if (statusDiv) statusDiv.classList.remove('hidden');
+                if (progressSection) progressSection.classList.add('hidden');
+                showResults(data.results || data.result, type);
+            } else if (data.status === 'failed') {
+                if (statusDiv) statusDiv.classList.remove('hidden');
+                if (progressSection) progressSection.classList.add('hidden');
+                showToast(data.error || 'Processamento falhou', 'error');
+            } else {
+                // Continue monitoring with longer interval for long-running tasks
+                const interval = data.progress > 70 ? 3000 : 2000; // Slower polling when near completion
+                setTimeout(checkStatus, interval);
+            }
+            
+        } catch (error) {
+            console.error('Error checking status:', error);
+            
+            // Retry logic for connection errors
+            if (retryCount < maxRetries) {
+                retryCount++;
+                console.log(`Retrying... (${retryCount}/${maxRetries})`);
+                setTimeout(checkStatus, 3000); // Retry after 3 seconds
+            } else {
+                if (statusDiv) statusDiv.classList.remove('hidden');
+                if (progressSection) progressSection.classList.add('hidden');
+                showToast('Conexão perdida. Recarregue a página e tente novamente.', 'error');
+            }
+        }
+    };
+    
+    checkStatus();
+}
+
+/**
+ * Show processing results
+ * @param {Object} result 
+ * @param {string} type 
+ */
+function showResults(result, type = 'video') {
+    const statusDiv = document.getElementById('status');
+    
+    if (!statusDiv) return;
+    
+    if (type === 'channel') {
+        statusDiv.innerHTML = `
+            <div class="result-section">
+                <h3>📺 Canal Processado</h3>
+                <div class="result-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-video"></i>
+                        <span>Total de vídeos: ${result.total_videos || 0}</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-check-circle text-green"></i>
+                        <span>Processados: ${result.videos_processed || 0}</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-times-circle text-red"></i>
+                        <span>Falharam: ${result.videos_failed || 0}</span>
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <a href="/results" class="btn btn-primary">
+                        <i class="fas fa-folder-open"></i>
+                        Ver Resultados
+                    </a>
+                </div>
+            </div>
+        `;
+    } else {
+        statusDiv.innerHTML = `
+            <div class="result-section">
+                <h3>✅ Processamento Concluído</h3>
+                <div class="result-stats">
+                    <div class="stat-item">
+                        <i class="fas fa-file-audio"></i>
+                        <span>Segmentos: ${result.num_segments || result.segments_count || 0}</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-users"></i>
+                        <span>Locutores: ${result.statistics?.speakers_count || result.speakers_count || 0}</span>
+                    </div>
+                    <div class="stat-item">
+                        <i class="fas fa-clock"></i>
+                        <span>Duração: ${formatDuration(result.statistics?.total_duration || result.total_duration || 0)}</span>
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <a href="/results" class="btn btn-primary">
+                        <i class="fas fa-folder-open"></i>
+                        Ver Resultados
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+}
+
 // Export functions for global use
 window.PipelineUtils = {
     formatDuration,
@@ -461,5 +681,9 @@ window.PipelineUtils = {
     hideLoading,
     timeAgo,
     scrollTo,
-    isInViewport
+    isInViewport,
+    processChannel,
+    processVideo,
+    monitorJob,
+    showResults
 };

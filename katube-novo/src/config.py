@@ -22,8 +22,18 @@ class Config:
     HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
     
     # Voice overlap detection
-    OVERLAP_THRESHOLD = float(os.getenv('OVERLAP_THRESHOLD', '0.5'))
+    OVERLAP_THRESHOLD = float(os.getenv('OVERLAP_THRESHOLD', '0.9'))  # Increased from 0.5 to 0.9 (90% overlap required to classify as overlapping)
     MIN_SPEECH_DURATION = float(os.getenv('MIN_SPEECH_DURATION', '0.5'))
+    
+    # Audio segmentation limits
+    MAX_SEGMENTS = int(os.getenv('MAX_SEGMENTS', '5000'))  # Maximum segments per audio
+    
+    # MOS Quality Filter settings (OBRIGATÓRIO)
+    MOS_THRESHOLD = float(os.getenv('MOS_THRESHOLD', '3.0'))  # Minimum MOS score to accept
+    # ENABLE_MOS_FILTER sempre True - filtro é obrigatório
+    
+    # YouTube API settings
+    YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
     
     # Directories
     BASE_DIR = Path(__file__).parent.parent
@@ -34,7 +44,7 @@ class Config:
     SPEAKERS_DIR = OUTPUT_DIR / "speakers"
     
     # YouTube download settings
-    YOUTUBE_FORMAT = f"bestaudio[ext={AUDIO_FORMAT}]/best[ext={AUDIO_FORMAT}]/bestaudio/best"
+    YOUTUBE_FORMAT = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worst"
     
     # STT preparation settings
     MAX_SEGMENT_SIZE = 25 * 1024 * 1024  # 25MB max per segment for STT
