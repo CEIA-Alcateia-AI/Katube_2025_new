@@ -207,13 +207,6 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
             'processing_time': processing_time,
             'downloaded_audio': str(audio_path),
             'num_segments': len(segments),
-<<<<<<< HEAD
-            'num_clean_segments': len(clean_segments),
-            'num_overlapping_segments': len(overlapping_segments),
-            'stt_ready_files': stt_files,
-            'denoised_segments': [str(p) for p in denoised_segments],
-            'statistics': pipeline._generate_statistics(stt_files, separation_results)
-=======
             'num_clean_segments': len(clean_segments) if 'clean_segments' in locals() else 0,
             'num_overlapping_segments': len(overlapping_segments) if 'overlapping_segments' in locals() else 0,
             'diarization_results': diarization_results if 'diarization_results' in locals() else {},
@@ -221,7 +214,6 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
             'stt_ready_files': stt_files if 'stt_files' in locals() else [],
             'stt_results': stt_result if 'stt_result' in locals() else {},
             'final_dataset_results': final_dataset_result if 'final_dataset_result' in locals() else {}
->>>>>>> main
         }
         
         # Save results to JSON

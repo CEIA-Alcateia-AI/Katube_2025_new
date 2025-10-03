@@ -65,7 +65,7 @@ class AudioProcessingPipeline:
         # Completeness filter moved to separate file (src/audio_completeness_filter.py)
         self.enable_completeness_filter = False  # DISABLED - moved to separate file
         
-        logger.info("🔍 Filtros de áudio:")
+        logger.info("\n\n\n🔍 Filtros de áudio:")
         logger.info("   - Filtro de completude: DESABILITADO (arquivo separado)")
         
         # Initialize MOS quality filter (OBRIGATÓRIO)
@@ -90,7 +90,7 @@ class AudioProcessingPipeline:
         
         # Initialize STT transcribers (separated models)
         self.enable_stt = True  # Sempre habilitado
-        logger.info("🔍 Inicializando STT transcribers separados...")
+        logger.info("\n\n\n🔍 Inicializando STT transcribers separados...")
         
         try:
             # Initialize Whisper STT
@@ -124,7 +124,7 @@ class AudioProcessingPipeline:
         
         # Initialize denoiser
         self.denoiser = Denoiser(model_name="DeepFilterNet3")
-        logger.info("✅ Denoiser (DeepFilterNet3) inicializado com sucesso")
+        logger.info("\n\n\n✅ Denoiser (DeepFilterNet3) inicializado com sucesso")
         
         # Initialize Sox normalizer for final processing
         self.sox_normalizer = SoxNormalizer(
@@ -180,7 +180,7 @@ class AudioProcessingPipeline:
         Returns:
             Path to downloaded audio file
         """
-        logger.info("\n\n=== STEP 1: DOWNLOADING YOUTUBE AUDIO ===")
+        logger.info("\n\n\n=== STEP 1: DOWNLOADING YOUTUBE AUDIO ===")
         
         if not self.session_dir:
             raise ValueError("No active session. Call create_session() first.")
@@ -194,7 +194,7 @@ class AudioProcessingPipeline:
         logger.info(f"Downloaded: {audio_path}")
         
         # Step 1.5: Normalize audio (FLAC, 24kHz, Mono)
-        logger.info("=== STEP 1.5: NORMALIZING AUDIO ===")
+        logger.info("\n\n\n=== STEP 1.5: NORMALIZING AUDIO ===")
         normalization_result = self.audio_normalizer.normalize_and_replace(audio_path)
         
         if normalization_result['success']:
@@ -220,7 +220,7 @@ class AudioProcessingPipeline:
         Returns:
             List of segment file paths
         """
-        logger.info("\n\n=== STEP 2: SEGMENTING AUDIO ===")
+        logger.info("\n\n\n=== STEP 2: SEGMENTING AUDIO ===")
         
         segments_dir = self.session_dir / 'segments'
         
@@ -247,7 +247,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary with filtering results
         """
-        logger.info("=== STEP 4: APPLYING MOS QUALITY FILTER ===")
+        logger.info("\n\n\n=== STEP 4: APPLYING MOS QUALITY FILTER ===")
         
         if not segment_paths:
             logger.warning("⚠️ No segments to filter")
@@ -268,10 +268,10 @@ class AudioProcessingPipeline:
         
         # Generate quality report
         quality_report = self.mos_filter.get_quality_report(segment_paths)
-        logger.info(f"📊 MOS Quality Report: {quality_report}")
+        logger.info(f"\n\n\n📊 MOS Quality Report: {quality_report}")
         
         # Log detailed results
-        logger.info(f"🎯 MOS filtering results:")
+        logger.info(f"\n\n\n🎯 MOS filtering results:")
         logger.info(f"   - Total segments analyzed: {len(segment_paths)}")
         logger.info(f"   - Accepted segments: {len(accepted_segments)}")
         logger.info(f"   - Rejected segments: {len(rejected_segments)}")
@@ -300,7 +300,7 @@ class AudioProcessingPipeline:
         if self.mos_filter is None:
             raise RuntimeError("❌ Filtro MOS não foi inicializado (OBRIGATÓRIO)")
         
-        logger.info(f"🔍 Filtrando {len(segment_paths)} segmentos por qualidade MOS (OBRIGATÓRIO)...")
+        logger.info(f"\n\n\n🔍 Filtrando {len(segment_paths)} segmentos por qualidade MOS (OBRIGATÓRIO)...")
         
         # Criar pastas específicas para áudios descartados
         rejected_completeness_dir = self.session_dir / 'audio_descartado_completude'
@@ -556,7 +556,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary with diarization results
         """
-        logger.info("\n\n=== STEP 3: PERFORMING SPEAKER DIARIZATION ===")
+        logger.info("\n\n\n=== STEP 3: PERFORMING SPEAKER DIARIZATION ===")
         
         diarization_dir = self.session_dir / 'diarization'
         
@@ -588,7 +588,7 @@ class AudioProcessingPipeline:
         Returns:
             Tuple of (clean_segments, overlapping_segments)
         """
-        logger.info("\n\n=== STEP 4: DETECTING VOICE OVERLAPS ===")
+        logger.info("\n\n\n=== STEP 4: DETECTING VOICE OVERLAPS ===")
         
         overlap_dir = self.session_dir / 'overlapping'
         clean_dir = self.session_dir / 'clean'
@@ -664,7 +664,7 @@ class AudioProcessingPipeline:
         Returns:
             Lista de arquivos denoisados
         """
-        logger.info("\n\n=== STEP 7: DENOISING AUDIO SEGMENTS AND CLEAN UP ===")
+        logger.info("\n\n\n=== STEP 7: DENOISING AUDIO SEGMENTS AND CLEAN UP ===")
         
         output_dir = output_dir or (self.session_dir / 'clean')
         output_dir.mkdir(exist_ok=True)
@@ -694,7 +694,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary of STT-ready files organized by speaker
         """
-        logger.info("\n\n=== STEP 6: PREPARING FOR STT ===")
+        logger.info("\n\n\n=== STEP 6: PREPARING FOR STT ===")
         
         stt_dir = self.session_dir / 'stt_ready'
         stt_files = {}
@@ -744,7 +744,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary with transcription results
         """
-        logger.info("=== STEP 7: TRANSCRIBING AUDIO SEGMENTS ===")
+        logger.info("\n\n\n=== STEP 7: TRANSCRIBING AUDIO SEGMENTS ===")
         
         if not self.enable_stt:
             logger.warning("STT transcribers are disabled, skipping transcription")
@@ -1031,7 +1031,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary with validation results
         """
-        logger.info("=== STEP 8: VALIDATING STT TRANSCRIPTIONS ===")
+        logger.info("\n\n\n=== STEP 8: VALIDATING STT TRANSCRIPTIONS ===")
         
         if not whisper_results or not wav2vec2_results:
             logger.warning("⚠️ No STT results to validate")
@@ -1177,7 +1177,7 @@ class AudioProcessingPipeline:
         Returns:
             Dictionary with filtering and denoising results
         """
-        logger.info(f"=== STEP 9: FILTERING AND DENOISING SEGMENTS (threshold: {similarity_threshold}) ===")
+        logger.info(f"\n\n\n=== STEP 9: FILTERING AND DENOISING SEGMENTS (threshold: {similarity_threshold}) ===")
         
         # Temporarily set debug level to see what's happening
         import logging
