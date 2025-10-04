@@ -160,6 +160,7 @@ class AudioProcessingPipeline:
 
     def cleanup(self, stages_to_clean: Optional[List[str]] = None):
         for stage in stages_to_clean:
+            logger.info(f'\n\n\n ==== Limpando a pasta {stage} ===')
             diretories_to_delete = self.session_dir / stage
             if diretories_to_delete.exists():
                 try:                    
@@ -680,7 +681,7 @@ class AudioProcessingPipeline:
         
         logger.info(f"Denoised {len(denoised_paths)}/{len(segments)} segments")
 
-        self.cleanup(stages_to_clean=['downloads', 'segments'])
+        self.cleanup(stages_to_clean=["downloads", "segments", "stt_ready", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
 
         return denoised_paths
     
@@ -1620,11 +1621,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     pipeline = AudioProcessingPipeline()
-    
-    # Example: process a YouTube video
-    # results = pipeline.process_youtube_url(
-    #     "https://www.youtube.com/watch?v=example",
-    #     custom_filename="example_video",
-    #     num_speakers=2
-    # )
-    # print(f"Pipeline results: {results['statistics']}")
+    pipeline.cleanup(stages_to_clean=["downloads", "segments", "stt_ready", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])

@@ -9,7 +9,7 @@ import logging
 import subprocess
 import sys
 
-from .config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -120,8 +120,7 @@ class YouTubeDownloader:
                 filename = custom_filename
             else:
                 # Clean filename and handle UTF-8 characters
-                filename = self._sanitize_filename(f"{video_id}_{video_title}")
-                filename = filename[:100]  # Limit length
+                filename = self._sanitize_filename(f"{video_id}")
                 
             output_path = str(self.output_dir / f"{filename}.%(ext)s")
             
@@ -172,6 +171,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     downloader = YouTubeDownloader()
-    # url = "https://www.youtube.com/watch?v=example"
-    # audio_file = downloader.download(url)
-    # print(f"Downloaded: {audio_file}")
+    url = "https://www.youtube.com/@emersonjonas1691"
+    audio_file = downloader.download(url)
+    print(f"Downloaded: {audio_file}")

@@ -39,10 +39,10 @@ class Config:
     BASE_DIR = Path(__file__).parent.parent
     AUDIOS_BAIXADOS_DIR = Path(os.getenv('AUDIOS_BAIXADOS_DIR', r'C:\Igor\BIA\Alcateia\Katube_2025_new\audios_download'))
     OUTPUT_DIR = AUDIOS_BAIXADOS_DIR / "output"
-    TEMP_DIR = AUDIOS_BAIXADOS_DIR / "temp"
     SEGMENTS_DIR = OUTPUT_DIR / "segments"
     SPEAKERS_DIR = OUTPUT_DIR / "speakers"
-    
+    TEMP_DIR = OUTPUT_DIR / "audio_bruto"
+
     # YouTube download settings
     YOUTUBE_FORMAT = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worst"
     
