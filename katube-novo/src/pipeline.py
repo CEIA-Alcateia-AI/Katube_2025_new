@@ -155,6 +155,19 @@ class AudioProcessingPipeline:
         logger.info(f"📁 Session local criada: {self.current_session}")
         logger.info(f"Created session: {self.current_session}")
         return self.session_dir
+
+
+    def cleanup(self, stages_to_clean: Optional[List[str]] = None):
+        for stage in stages_to_clean:
+            logger.info(f'\n\n\n ==== Limpando a pasta {stage} ===')
+            diretories_to_delete = self.session_dir / stage
+            if diretories_to_delete.exists():
+                try:                    
+                    logger.info(f"\n\n[FINAL CLEAN-UP] Deletando a pasta: {diretories_to_delete}")
+                    shutil.rmtree(diretories_to_delete)
+                    logger.info(f"✅ Sucesso: Diretório de downloads deletado: {diretories_to_delete}")
+                except Exception as e:
+                    logger.error(f"❌ Falha ao deletar o diretório de downloads: {e}")
     
     def download_youtube_audio(self, url: str, custom_filename: Optional[str] = None) -> Path:
         """
