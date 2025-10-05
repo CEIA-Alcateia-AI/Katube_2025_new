@@ -33,7 +33,7 @@ class Config:
     # ENABLE_MOS_FILTER sempre True - filtro é obrigatório
     
     # YouTube API settings
-    YOUTUBE_API_KEY = os.getenv('AIzaSyBwUXn6XMDCq-m4i2xx58fcgLfkaI4yabM')
+    YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
     
     # Directories
     BASE_DIR = Path(__file__).parent.parent
