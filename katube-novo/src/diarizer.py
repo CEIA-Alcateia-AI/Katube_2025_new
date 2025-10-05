@@ -34,7 +34,7 @@ class EnhancedDiarizer:
         try:
             self.pipeline = Pipeline.from_pretrained(
                 Config.PYANNOTE_MODEL,
-                use_auth_token=self.huggingface_token
+                token=self.huggingface_token
             )
             if self.pipeline is not None:
                 self.pipeline = self.pipeline.to(self.device)
