@@ -84,7 +84,8 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
         job.update("downloading", 10, "Baixando áudio do YouTube...")
         
         # Create session
-        session_name = options.get('session_name') or f"web_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        video_id = pipeline._extract_video_id(url)
+        session_name = options.get('session_name') or video_id
         session_dir = pipeline.create_session(session_name)
         
         # Download
@@ -190,6 +191,10 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
                     final_dataset_result = {'success_count': 0, 'failure_count': 0}
             else:
                 final_dataset_result = {'success_count': 0, 'failure_count': 0}
+        
+        job.update("clean_up", 99, "Executando limpeza de arquivos intermediários...")
+        pipeline.cleanup(stages_to_clean=["downloads", "segments", "stt_ready", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
+        
         
         # Complete results
         processing_time = time.time() - job.start_time.timestamp()
