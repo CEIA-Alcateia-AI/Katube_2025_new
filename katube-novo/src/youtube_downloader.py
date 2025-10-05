@@ -120,7 +120,7 @@ class YouTubeDownloader:
                 filename = custom_filename
             else:
                 # Clean filename and handle UTF-8 characters
-                filename = self._sanitize_filename(f"{video_id}_{video_title}")
+                filename = self._sanitize_filename(f"{video_id}")
                 filename = filename[:100]  # Limit length
                 
             output_path = str(self.output_dir / f"{filename}.%(ext)s")
