@@ -41,7 +41,7 @@ class OverlapDetector:
                 # Use authentication token
                 model = Model.from_pretrained(
                     "pyannote/segmentation-3.0",
-                    use_auth_token=hf_token
+                    token=hf_token
                 )
                 logger.info("✅ Loaded pyannote/segmentation-3.0 model for OSD (with authentication)")
             else:

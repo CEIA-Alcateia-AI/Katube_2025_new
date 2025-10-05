@@ -14,6 +14,7 @@ import re
 BUSCADOR_PATH = Path(__file__).resolve().parent.parent / "buscador"
 sys.path.insert(0, str(BUSCADOR_PATH))
 
+'''
 try:
     from search import search_videos, get_videos
     from googleapiclient.discovery import build
@@ -23,7 +24,7 @@ except ImportError as e:
     search_videos = None
     get_videos = None
     build = None
-    SEARCH_MODULES_AVAILABLE = False
+    SEARCH_MODULES_AVAILABLE = False'''
 
 logger = logging.getLogger(__name__)
 
