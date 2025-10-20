@@ -24,7 +24,8 @@ from src.pipeline import AudioProcessingPipeline
 from src.config import Config
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this'
+import secrets
+app.secret_key = secrets.token_urlsafe(32)
 
 # Global variables for job tracking
 active_jobs = {}
@@ -83,7 +84,8 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
         job.update("downloading", 10, "Baixando áudio do YouTube...")
         
         # Create session
-        session_name = options.get('session_name') or f"web_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        video_id = pipeline._extract_video_id(url)
+        session_name = options.get('session_name') or video_id
         session_dir = pipeline.create_session(session_name)
         
         # Download
@@ -163,6 +165,36 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
                 filter_info = f" | Filtro 80%: {validated_count} validados, {denoised_count} denoised"
             
             job.update("filtering", 85, f"STT: {stt_result.get('whisper_count', 0)} Whisper + {stt_result.get('wav2vec2_count', 0)} WAV2VEC2{validation_info}{filter_info}")
+            
+            # Final dataset creation with Sox normalization
+            if 'filter_and_denoise' in stt_result and stt_result['filter_and_denoise'].get('success'):
+                job.update("finalizing", 90, "Criando dataset final com normalização Sox...")
+                
+                # Get denoised audio paths
+                denoised_audio_paths = stt_result['filter_and_denoise'].get('denoised_audio_paths', [])
+                print(f"🔍 DEBUG: denoised_audio_paths = {len(denoised_audio_paths)} arquivos")
+                for i, path in enumerate(denoised_audio_paths[:3]):  # Show first 3
+                    print(f"   {i+1}: {path}")
+                
+                if denoised_audio_paths:
+                    print(f"✅ Iniciando create_final_dataset com {len(denoised_audio_paths)} arquivos")
+                    # Create final dataset
+                    final_dataset_result = pipeline.create_final_dataset(
+                        denoised_audio_paths=denoised_audio_paths,
+                        stt_results_dir=session_dir / 'stt_results',
+                        output_dir=session_dir
+                    )
+                    
+                    job.update("finalizing", 95, f"Dataset final: {final_dataset_result['success_count']} áudios normalizados")
+                else:
+                    print("❌ denoised_audio_paths está vazio! SOX não será executado.")
+                    final_dataset_result = {'success_count': 0, 'failure_count': 0}
+            else:
+                final_dataset_result = {'success_count': 0, 'failure_count': 0}
+        
+        job.update("clean_up", 99, "Executando limpeza de arquivos intermediários...")
+        pipeline.cleanup(stages_to_clean=["downloads", "segments", "stt_ready", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
+        
         
         # Complete results
         processing_time = time.time() - job.start_time.timestamp()
@@ -179,7 +211,8 @@ def process_youtube_url_background(job_id: str, url: str, options: dict):
             'diarization_results': diarization_results if 'diarization_results' in locals() else {},
             'separation_results': separation_results if 'separation_results' in locals() else {},
             'stt_ready_files': stt_files if 'stt_files' in locals() else [],
-            'stt_results': stt_result if 'stt_result' in locals() else {}
+            'stt_results': stt_result if 'stt_result' in locals() else {},
+            'final_dataset_results': final_dataset_result if 'final_dataset_result' in locals() else {}
         }
         
         # Save results to JSON
@@ -535,7 +568,7 @@ if __name__ == '__main__':
     print("============================================================")
     print("📁 Processamento local - Arquivos salvos no disco")
     print("🎯 Aceita: Canais YouTube OU vídeos individuais")
-    print("🔍 Pipeline: Download → Normalização → Segmentação → MOS → Diarização → Overlap → Separação → STT → Validação → Denoiser")
+    print("🔍 Pipeline: Download → Normalização → Segmentação → MOS → Diarização → OSD → Separação → STT → Validação → Denoiser → Normalização Final → Dataset")
     print("🌐 Acesse: http://localhost:5000")
     print("============================================================")
     print()
@@ -543,13 +576,15 @@ if __name__ == '__main__':
     print("• Download direto do YouTube em FLAC 24kHz Mono")
     print("• Normalização de áudio com FFmpeg")
     print("• Segmentação natural baseada em pausas da fala (10s-1min)")
-    print("• Filtro de qualidade MOS (threshold: 2.5)")
+    print("• Filtro de qualidade MOS (3-tier: ≥3.0, 2.5-3.0, <2.5)")
     print("• Diarização com pyannote.audio 3.1")
-    print("• Detecção de sobreposição de vozes (threshold: 90%)")
+    print("• Detecção de sobreposição de vozes (OSD) com pyannote/segmentation-3.0")
     print("• Separação por locutor")
-    print("• STT dual: Whisper + WAV2VEC2")
+    print("• STT dual: Distil-Whisper + WAV2VEC2-CORAA")
     print("• Validação STT com Levenshtein (80% threshold)")
     print("• Denoiser com DeepFilterNet3")
+    print("• Normalização final com Sox")
+    print("• Dataset final com nomenclatura padronizada")
     print("• Todos os arquivos salvos localmente")
     print()
     print("Pressione Ctrl+C para parar o servidor")
