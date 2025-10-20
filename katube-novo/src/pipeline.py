@@ -31,12 +31,11 @@ logger = logging.getLogger(__name__)
 class AudioProcessingPipeline:
     """
     Complete pipeline for YouTube audio processing:
-    1. Download audio from YouTube
-    2. Segment audio intelligently
-    3. Perform speaker diarization
-    4. Detect voice overlaps
-    5. Separate audio by speakers
-    6. Prepare for STT processing
+    1. Segment audio intelligently
+    2. Perform speaker diarization
+    3. Detect voice overlaps
+    4. Separate audio by speakers
+    5. Prepare for STT processing
     """
     
     def __init__(self, 
@@ -51,9 +50,7 @@ class AudioProcessingPipeline:
         # Set up directories
         self.output_base_dir = output_base_dir or Config.OUTPUT_DIR
         Config.create_directories()
-        
-        # Initialize components
-        self.downloader = YouTubeDownloader()
+
         # Use intelligent segmenter with VAD for quality cuts
         self.segmenter = AudioSegmenter(segment_min_duration, segment_max_duration)
         self.diarizer = EnhancedDiarizer(huggingface_token)
@@ -149,7 +146,7 @@ class AudioProcessingPipeline:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         
         # Create minimal subdirectories (only for temporary processing)
-        subdirs = ['downloads', 'segments', 'diarization', 'speakers', 'clean', 'overlapping', 'stt_ready']
+        subdirs = ['segments', 'diarization', 'speakers', 'clean', 'overlapping', 'stt_ready']
         for subdir in subdirs:
             (self.session_dir / subdir).mkdir(exist_ok=True)
         
@@ -169,46 +166,6 @@ class AudioProcessingPipeline:
                     logger.info(f"✅ Sucesso: Diretório de downloads deletado: {diretories_to_delete}")
                 except Exception as e:
                     logger.error(f"❌ Falha ao deletar o diretório de downloads: {e}")
-    
-    def download_youtube_audio(self, url: str, custom_filename: Optional[str] = None) -> Path:
-        """
-        Step 1: Download audio from YouTube.
-        
-        Args:
-            url: YouTube URL
-            custom_filename: Optional custom filename
-            
-        Returns:
-            Path to downloaded audio file
-        """
-        logger.info("=== STEP 1: DOWNLOADING YOUTUBE AUDIO ===")
-        
-        if not self.session_dir:
-            raise ValueError("No active session. Call create_session() first.")
-        
-        # Set download directory to session downloads folder
-        self.downloader.output_dir = self.session_dir / 'downloads'
-        
-        # Download audio
-        audio_path = self.downloader.download(url, custom_filename)
-        
-        logger.info(f"Downloaded: {audio_path}")
-        
-        # Step 1.5: Normalize audio (FLAC, 24kHz, Mono)
-        logger.info("=== STEP 1.5: NORMALIZING AUDIO ===")
-        normalization_result = self.audio_normalizer.normalize_and_replace(audio_path)
-        
-        if normalization_result['success']:
-            logger.info(f"✅ Audio normalized: {normalization_result['format']}, "
-                       f"{normalization_result['sample_rate']}Hz, "
-                       f"{normalization_result['channels']} channel(s)")
-            logger.info(f"   Size: {normalization_result['size'] / (1024*1024):.1f} MB")
-        else:
-            logger.error(f"❌ Audio normalization failed: {normalization_result['error']}")
-            # Continue with original audio if normalization fails
-            logger.warning("⚠️ Continuing with original audio format")
-        
-        return audio_path
     
     def segment_audio(self, audio_path: Path, use_intelligent_segmentation: bool = True) -> List[Path]:
         """
@@ -783,19 +740,17 @@ class AudioProcessingPipeline:
             logger.error(f"Error in transcription step: {e}")
             return {"error": str(e)}
     
-    
-    def process_youtube_url(self, 
-                           url: str, 
-                           custom_filename: Optional[str] = None,
+    def process_local_audio(self,  
+                           audio_path: Path, 
                            num_speakers: Optional[int] = None,
                            enhance_audio: bool = True,
                            use_intelligent_segmentation: bool = True,
                            session_name: Optional[str] = None) -> Dict[str, Any]:
         """
-        Complete pipeline: process a YouTube URL through all steps.
+        Complete pipeline: process a audio through all steps.
         
         Args:
-            url: YouTube URL
+            audio_path: audio to segment and process
             custom_filename: Custom filename for downloaded audio
             num_speakers: Hint for number of speakers
             enhance_audio: Apply audio enhancement
@@ -808,16 +763,26 @@ class AudioProcessingPipeline:
         start_time = time.time()
         
         logger.info("=== STARTING COMPLETE PIPELINE ===")
-        logger.info(f"URL: {url}")
+        logger.info(f"Processing file: {audio_path}")
         
+        #Validação do áudio de entrada
+        if not audio_path.exists():
+            logger.error(f"❌ Audio file does not exist: {audio_path}")
+            return {'success': False, 'error': f"Audio file does not exist: {audio_path}"}
+        
+        flac_files = list(audio_path.glob('*.flac'))
+        if not flac_files:
+            error_msg = f"Nenhum arquivo .flac encontrado no diretório: {audio_path}"
+            logger.error(f"❌ {error_msg}")
+            raise FileNotFoundError(error_msg)
+        source_audio_path = flac_files[0]
+
         try:
             # Create session
-            session_dir = self.create_session(session_name)
+            session_name_resolved = session_name or audio_path.stem
+            session_dir = self.create_session(session_name_resolved)
             
-            # Step 1: Download
-            audio_path = self.download_youtube_audio(url, custom_filename)
-            
-            # Step 2: Segment
+            # Step 1: Segment
             segments = self.segment_audio(audio_path, use_intelligent_segmentation)
             
             # Step 3: Apply completeness filter (DISABLED - moved to separate file)
@@ -1591,7 +1556,7 @@ if __name__ == "__main__":
     pipeline = AudioProcessingPipeline()
     
     # Example: process a YouTube video
-    # results = pipeline.process_youtube_url(
+    # results = pipeline.process_local_audio(
     #     "https://www.youtube.com/watch?v=example",
     #     custom_filename="example_video",
     #     num_speakers=2

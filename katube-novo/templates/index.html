@@ -16,48 +16,29 @@
 
 
 
-    <!-- Formulário Principal -->
     <div class="form-section">
         <form id="processForm" class="process-form">
-            <!-- Channel URL Input -->
+    
+            <div class="info-box">
+                <i class="fas fa-info-circle"></i>
+                <p><strong>Instrução:</strong> Insira abaixo o <strong>caminho completo (absoluto)</strong> para a pasta no <strong>servidor AWS</strong> que contém o arquivo de áudio <code>.flac</code> que você deseja processar.</p>
+                <p>Exemplo: <code>/home/ubuntu/meus_audios/video_id_123</code></p>
+            </div>
+    
             <div class="form-group">
-                <label for="channelUrl">
-                    <i class="fas fa-tv"></i>
-                    URL do Canal (Opcional)
+                <label for="dir_path">
+                    <i class="fas fa-folder-open"></i>
+                    Caminho da Pasta no Servidor (Contendo o .flac)
                 </label>
                 <input 
                     type="text" 
-                    id="channelUrl" 
-                    name="channelUrl" 
-                    placeholder="https://www.youtube.com/@canal..." 
+                    id="dir_path" 
+                    name="directory_path"  placeholder="/caminho/completo/no/servidor/para/pasta_com_audio" 
                     class="form-input"
-                >
-                <small class="form-help">Cole a URL do canal para processar todos os vídeos automaticamente</small>
+                    required  >
+                <small class="form-help">Este caminho deve existir no servidor onde a pipeline está rodando.</small>
             </div>
             
-            <!-- URL Input -->
-            <div class="form-group">
-                <label for="url">
-                    <i class="fas fa-link"></i>
-                    URL do Vídeo (Opcional)
-                </label>
-                <input 
-                    type="url" 
-                    id="url" 
-                    name="url" 
-                    placeholder="https://www.youtube.com/watch?v=..." 
-                    class="form-input"
-                >
-                <small class="form-help">Para processar apenas um vídeo específico</small>
-            </div>
-            
-            <!-- Info Box -->
-            <div class="info-box">
-                <i class="fas fa-info-circle"></i>
-                <p><strong>Escolha uma opção:</strong> Insira a URL do canal para processar todos os vídeos OU a URL de um vídeo específico para processamento individual.</p>
-            </div>
-
-            <!-- Configurações Avançadas -->
             <div class="advanced-options">
                 <button type="button" class="toggle-advanced" onclick="toggleAdvanced()">
                     <i class="fas fa-cog"></i>
@@ -67,118 +48,71 @@
                 
                 <div id="advancedOptions" class="advanced-content hidden">
                     <div class="form-row">
-                        <div class="form-group">
-                            <label for="filename">
-                                <i class="fas fa-file-audio"></i>
-                                Nome do Arquivo
-                            </label>
-                            <input 
-                                type="text" 
-                                id="filename" 
-                                name="filename" 
-                                placeholder="nome_personalizado"
-                                class="form-input"
-                            >
-                        </div>
-                        
-                        <div class="form-group">
+                         <div class="form-group">
                             <label for="session_name">
                                 <i class="fas fa-folder"></i>
-                                Nome da Sessão
+                                Nome da Sessão (Opcional)
                             </label>
                             <input 
                                 type="text" 
                                 id="session_name" 
                                 name="session_name" 
-                                placeholder="minha_sessao"
+                                placeholder="Deixe em branco para usar o nome da pasta"
                                 class="form-input"
                             >
                         </div>
+                        <div class="form-group">
+                            <label for="filename"> 
+                                <i class="fas fa-file-audio"></i>
+                                 Nome Base do Arquivo (Opcional) 
+                            </label>
+                            <input 
+                                type="text" 
+                                id="filename" 
+                                name="filename" 
+                                placeholder="nome_base_opcional"
+                                class="form-input"
+                            >
+                            <small class="form-help">Usado para nomear arquivos de saída, se fornecido.</small>
+                        </div>
                     </div>
-
+    
                     <div class="form-row">
                         <div class="form-group">
                             <label for="num_speakers">
                                 <i class="fas fa-users"></i>
                                 Número de Locutores (opcional)
                             </label>
-                            <input 
-                                type="number" 
-                                id="num_speakers" 
-                                name="num_speakers" 
-                                min="1" 
-                                max="10"
-                                placeholder="Auto"
-                                class="form-input"
-                            >
+                            <input type="number" id="num_speakers" name="num_speakers" min="1" max="10" placeholder="Auto" class="form-input">
                             <small class="form-help">Deixe vazio para detecção automática</small>
                         </div>
-                        
-                        <div class="form-group">
+                         <div class="form-group">
                             <label for="mos_threshold">
                                 <i class="fas fa-star"></i>
                                 Limiar MOS (Qualidade)
                             </label>
-                            <input 
-                                type="number" 
-                                id="mos_threshold" 
-                                name="mos_threshold" 
-                                min="1.0" 
-                                max="5.0" 
-                                step="0.1"
-                                value="2.0"
-                                class="form-input"
-                            >
+                            <input type="number" id="mos_threshold" name="mos_threshold" min="1.0" max="5.0" step="0.1" value="2.0" class="form-input">
                             <small class="form-help">Nota mínima para aceitar áudio (1-5)</small>
                         </div>
                     </div>
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label class="info-label">
-                                <i class="fas fa-filter"></i>
-                                Filtro de Qualidade MOS (OBRIGATÓRIO)
-                            </label>
-                            <small class="form-help">Filtro MOS é sempre habilitado - filtra áudios de baixa qualidade automaticamente</small>
+                             <label for="min_duration">
+                                 <i class="fas fa-clock"></i>
+                                 Duração Mín. Segmento (s)
+                             </label>
+                             <input type="number" id="min_duration" name="min_duration" value="10.0" step="0.5" min="5.0" max="30.0" class="form-input">
                         </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="min_duration">
-                                <i class="fas fa-clock"></i>
-                                Duração Mín. Segmento (s)
-                            </label>
-                            <input 
-                                type="number" 
-                                id="min_duration" 
-                                name="min_duration" 
-                                value="10.0"
-                                step="0.5"
-                                min="5.0"
-                                max="30.0"
-                                class="form-input"
-                            >
-                        </div>
-                        
-                        <div class="form-group">
+                         <div class="form-group">
                             <label for="max_duration">
-                                <i class="fas fa-clock"></i>
-                                Duração Máx. Segmento (s)
+                                 <i class="fas fa-clock"></i>
+                                 Duração Máx. Segmento (s)
                             </label>
-                            <input 
-                                type="number" 
-                                id="max_duration" 
-                                name="max_duration" 
-                                value="15.0"
-                                step="0.5"
-                                min="10.0"
-                                max="60.0"
-                                class="form-input"
-                            >
+                            <input type="number" id="max_duration" name="max_duration" value="15.0" step="0.5" min="10.0" max="60.0" class="form-input">
                         </div>
                     </div>
-
+    
                     <div class="form-group">
                         <div class="checkbox-group">
                             <label class="checkbox-label">
@@ -187,7 +121,6 @@
                                 <i class="fas fa-volume-up"></i>
                                 Melhorar qualidade do áudio
                             </label>
-                            
                             <label class="checkbox-label">
                                 <input type="checkbox" id="intelligent_segmentation" name="intelligent_segmentation" checked>
                                 <span class="checkmark"></span>
@@ -198,12 +131,10 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Botão de Processar -->
+    
             <button type="submit" class="btn-process" id="processBtn">
                 <i class="fas fa-play"></i>
-                Processar Áudio
-            </button>
+                Processar Áudio Local </button>
         </form>
     </div>
 
