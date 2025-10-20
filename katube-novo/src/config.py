@@ -52,5 +52,5 @@ class Config:
     @classmethod
     def create_directories(cls):
         """Create necessary directories."""
-        for dir_path in [cls.OUTPUT_DIR, cls.TEMP_DIR, cls.SEGMENTS_DIR, cls.SPEAKERS_DIR]:
+        for dir_path in [cls.OUTPUT_DIR]:
             dir_path.mkdir(parents=True, exist_ok=True)

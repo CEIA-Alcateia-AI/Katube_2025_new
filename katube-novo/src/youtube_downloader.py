@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class YouTubeDownloader:
     def __init__(self, output_dir: Optional[Path] = None):
-        self.output_dir = output_dir or Config.TEMP_DIR
+        self.output_dir = output_dir or Config.OUTPUT_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Configure UTF-8 encoding for subprocesses
@@ -121,6 +121,7 @@ class YouTubeDownloader:
             else:
                 # Clean filename and handle UTF-8 characters
                 filename = self._sanitize_filename(f"{video_id}")
+                filename = filename[:200]  # Limit length
                 
             output_path = str(self.output_dir / f"{filename}.%(ext)s")
             
