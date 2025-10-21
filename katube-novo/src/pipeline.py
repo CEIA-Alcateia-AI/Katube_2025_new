@@ -677,7 +677,7 @@ class AudioProcessingPipeline:
             logger.info(f"Results saved to: {results_file}")
             
             logger.info("===\n\n\n LIMPEZA DE DIRETÓRIOS INTERMEDIÁRIOS ===")
-            self.cleanup(stages_to_clean=["downloads", "segments", "stt_ready", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
+            self.cleanup(stages_to_clean=["downloads", "audio_rejeitado_validacao","segments", "stt_ready","stt_results\STT-wav2vec2", "stt_results\STT-whisper", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
 
             return results
             
