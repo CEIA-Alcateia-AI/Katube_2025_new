@@ -13,7 +13,7 @@ import librosa
 from pyannote.audio import Pipeline
 from pyannote.core import Segment
 
-from .config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 

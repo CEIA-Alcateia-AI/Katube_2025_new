@@ -11,8 +11,8 @@ import webrtcvad
 from scipy.signal import find_peaks
 import pyloudnorm as pyln
 
-from .config import Config
-from .naming_utils import extract_base_name, generate_standard_name
+from config import Config
+from naming_utils import extract_base_name, generate_standard_name
 
 logger = logging.getLogger(__name__)
 
@@ -424,7 +424,7 @@ class AudioSegmenter:
                 # Use standardized naming
                 base_name = extract_base_name(audio_path)
                 standard_name = generate_standard_name(base_name, "segment", segment_idx)
-                filename = f"{standard_name}.{Config.AUDIO_FORMAT}"
+                filename = f"{standard_name}.flac"
                 segment_path = output_dir / filename
                 
                 sf.write(segment_path, segment_audio, self.sample_rate)

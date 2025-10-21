@@ -11,7 +11,7 @@ import soundfile as sf
 import librosa
 from scipy.signal import butter, filtfilt
 
-from .config import Config
+from config import Config
 
 logger = logging.getLogger(__name__)
 
