@@ -3,6 +3,7 @@
 Command-line interface to run the Audio Processing Pipeline on local directories.
 """
 import os
+import shutil
 import sys
 import logging
 from pathlib import Path
@@ -23,7 +24,6 @@ except ModuleNotFoundError as e:
     sys.exit(1)
 
 # --- Configuração do Logging ---
-# (Mais simples que o do Flask, direto para o console)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
@@ -31,7 +31,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- Função Principal ---
 def main():
     # --- Configuração dos Argumentos de Linha de Comando ---
     parser = argparse.ArgumentParser(description="Executa a pipeline de processamento de áudio em um diretório local.")
@@ -77,7 +76,6 @@ def main():
     parser.add_argument("--output-base-dir", type=Path, default=Config.OUTPUT_DIR, help="Diretório base onde as sessões de saída serão criadas.")
     parser.add_argument('--cleanup-policy', type=str, default='final_dataset', choices=['final_dataset', 'intermediate', 'all_except_raw_data', 'none'], help="Política de limpeza a ser aplicada no final.")
     parser.add_argument('--use-cuda', action=argparse.BooleanOptionalAction, default=False, help="Habilita o uso de GPU (CUDA) se disponível.")
-
 
     # --- Parsing dos Argumentos ---
     args = parser.parse_args()
@@ -126,11 +124,9 @@ def main():
         # Imprime os resultados de forma legível
         print(json.dumps(results, indent=2, ensure_ascii=False, default=str))
 
-        # Aplica o cleanup final (a lógica já está dentro de process_local_audio se você a colocou lá)
-        # Se você moveu o cleanup para fora, chame aqui:
-        # logger.info("🧹 Executando cleanup final...")
-        # pipeline.cleanup(policy=args.cleanup_policy, session_name=results.get('session_name'))
-
+        #Apagando diretório original
+        logger.info("🧹 Executando cleanup final...")
+        shutil.rmtree(args.input_directory)
 
     except FileNotFoundError as e:
         logger.error(f"❌ ERRO DE ARQUIVO: {e}")
