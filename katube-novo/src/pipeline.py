@@ -152,7 +152,7 @@ class AudioProcessingPipeline:
             logger.info(f'\n\n\n ==== Limpando a pasta {stage} ===')
             diretories_to_delete = self.session_dir / stage
             if diretories_to_delete.exists():
-                try:                    
+                try:
                     logger.info(f"\n\n[FINAL CLEAN-UP] Deletando a pasta: {diretories_to_delete}")
                     shutil.rmtree(diretories_to_delete)
                     logger.info(f"✅ Sucesso: Diretório de downloads deletado: {diretories_to_delete}")
@@ -676,6 +676,9 @@ class AudioProcessingPipeline:
             logger.info(f"Processing time: {processing_time:.2f}s")
             logger.info(f"Results saved to: {results_file}")
             
+            logger.info("===\n\n\n LIMPEZA DE DIRETÓRIOS INTERMEDIÁRIOS ===")
+            self.cleanup(stages_to_clean=["downloads", "segments", "stt_ready", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
+
             return results
             
         except Exception as e:
@@ -1070,9 +1073,6 @@ class AudioProcessingPipeline:
                     logger.warning(f"   ❌ Não encontrado: {denoised_path}")
             
             logger.info(f"📊 Total de áudios denoised coletados: {len(denoised_audio_paths)}")
-
-            #logger.info("===\n\n\n LIMPEZA DE DIRETÓRIOS INTERMEDIÁRIOS ===")
-            #self.cleanup(stages_to_clean=["downloads", "segments", "stt_ready", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
 
             return {
                 'success': True,

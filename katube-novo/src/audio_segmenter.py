@@ -403,7 +403,7 @@ class AudioSegmenter:
                         # Use standardized naming
                         base_name = extract_base_name(audio_path)
                         standard_name = generate_standard_name(base_name, "chunk", chunk_idx)
-                        filename = f"{standard_name}.{Config.AUDIO_FORMAT}"
+                        filename = f"{standard_name}.flac"
                         segment_path = output_dir / filename
                         
                         sf.write(segment_path, chunk_audio, self.sample_rate)
