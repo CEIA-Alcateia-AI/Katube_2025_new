@@ -7,7 +7,7 @@ import subprocess
 import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from .naming_utils import extract_base_name, generate_standard_name
+from naming_utils import extract_base_name, generate_standard_name
 
 logger = logging.getLogger(__name__)
 

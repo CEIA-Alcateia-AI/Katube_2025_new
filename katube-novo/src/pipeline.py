@@ -10,21 +10,19 @@ import json
 from datetime import datetime
 import shutil
 
-from .config import Config
-from .youtube_downloader import YouTubeDownloader
-from .youtube_scanner import YouTubeChannelScanner
-from .audio_segmenter import AudioSegmenter
-from .diarizer import EnhancedDiarizer
-from .overlap_detector import OverlapDetector
-from .speaker_separator import SpeakerSeparator
-from .stt_whisper import WhisperSTTTranscriber
-from .stt_wav2vec2 import WAV2VEC2STTTranscriber
-from .audio_normalizer import AudioNormalizer
-from .validation import create_validation_file
-from .marcos_validation.validador_transcricao import create_validation_file as marcos_create_validation_file
-from .denoiser import Denoiser
-from .sox_normalizer import SoxNormalizer
-from .mos_filter import MOSQualityFilter
+from config import Config
+from audio_segmenter import AudioSegmenter
+from diarizer import EnhancedDiarizer
+from overlap_detector import OverlapDetector
+from speaker_separator import SpeakerSeparator
+from stt_whisper import WhisperSTTTranscriber
+from stt_wav2vec2 import WAV2VEC2STTTranscriber
+from audio_normalizer import AudioNormalizer
+from validation import create_validation_file
+from marcos_validation.validador_transcricao import create_validation_file as marcos_create_validation_file
+from denoiser import Denoiser
+from sox_normalizer import SoxNormalizer
+from mos_filter import MOSQualityFilter
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +75,6 @@ class AudioProcessingPipeline:
         except Exception as e:
             logger.error(f"❌ ERRO CRÍTICO: Falha ao inicializar filtro MOS: {e}")
             raise RuntimeError(f"Filtro MOS é OBRIGATÓRIO e falhou: {e}")
-        
-        # Initialize YouTube scanner
-        self.youtube_scanner = YouTubeChannelScanner(
-            api_key=Config.YOUTUBE_API_KEY or '',
-            base_dir=self.output_base_dir / "youtube_scans"
-        )
         
         # Initialize STT transcribers (separated models)
         self.enable_stt = True  # Sempre habilitado
@@ -279,49 +271,6 @@ class AudioProcessingPipeline:
         logger.info(f"📊 Relatório de Qualidade MOS: {quality_report}")
         
         return accepted_segments, rejected_segments
-    
-    def scan_youtube_channel(self, channel_url: str) -> Dict[str, Any]:
-        """
-        Scan YouTube channel for all videos.
-        
-        Args:
-            channel_url: YouTube channel URL
-            
-        Returns:
-            Dictionary with scan results
-        """
-        logger.info(f"🔍 Scanning YouTube channel: {channel_url}")
-        
-        result = self.youtube_scanner.scan_channel(channel_url)
-        
-        if result:
-            logger.info(f"✅ Channel scan complete: {result}")
-            return {
-                'success': True,
-                'video_list_path': str(result),
-                'message': 'Channel scanned successfully'
-            }
-        else:
-            logger.error("❌ Channel scan failed")
-            return {
-                'success': False,
-                'error': 'Channel scan failed',
-                'message': 'Could not scan channel'
-            }
-    
-    def process_youtube_channel(self, channel_url: str, max_videos: int = 2500, progress_callback=None) -> Dict[str, Any]:
-        """
-        Scan and process videos from a YouTube channel.
-        
-        Args:
-            channel_url: YouTube channel URL
-            max_videos: Maximum number of videos to process
-            progress_callback: Optional callback for progress updates (video_url, success, total_videos, current_index)
-            
-        Returns:
-            Dictionary with processing results
-        """
-        logger.info(f"🔄 Processing YouTube channel: {channel_url}")
         
         def process_video_callback(video_url: str, total_videos: int, current_index: int) -> bool:
             """Callback to process each video from the channel."""
@@ -346,162 +295,7 @@ class AudioProcessingPipeline:
                     progress_callback(video_url, False, total_videos, current_index)
                 return False
         
-        # Scan and process channel
-        result = self.youtube_scanner.scan_and_process_channel(
-            channel_url=channel_url,
-            process_callback=process_video_callback
-        )
-        
         return result
-    
-    def process_single_video(self, video_url: str) -> Dict[str, Any]:
-        """
-        Process a single YouTube video through the complete pipeline.
-        
-        Args:
-            video_url: YouTube video URL
-            
-        Returns:
-            Dictionary with processing results
-        """
-        try:
-            logger.info(f"🎬 Processing single video: {video_url}")
-            
-            # Create session for this video
-            self.create_session()
-            
-            # Step 1: Download video
-            try:
-                audio_path = self.download_youtube_audio(video_url)
-                logger.info(f"✅ Downloaded: {audio_path.name}")
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': f"Download failed: {str(e)}"
-                }
-            
-            # Step 2: Segment audio
-            try:
-                segments = self.segment_audio(audio_path)
-                logger.info(f"✅ Segmented into {len(segments)} segments")
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': f"Segmentation failed: {str(e)}"
-                }
-            
-            # Step 3: Apply completeness filter (DISABLED - moved to separate file)
-            # Completeness filter is now in src/audio_completeness_filter.py
-            # if self.enable_completeness_filter:
-            #     completeness_rejected_dir = self.session_dir / 'audio_descartado_completude'
-            #     completeness_result = self.apply_completeness_filter(segments, rejected_dir=completeness_rejected_dir)
-            #     segments = completeness_result['complete_segments']
-            #     logger.info(f"✅ Completeness filter: {len(segments)} segments passed (filtered {completeness_result['cut_count']} cut segments)")
-            
-            # Step 4: Apply MOS filter
-            if self.enable_mos_filter:
-                try:
-                    mos_rejected_dir = self.session_dir / 'audio_descartado_mos'
-                    mos_result = self.apply_mos_filter(segments, rejected_dir=mos_rejected_dir)
-                    segments = mos_result['filtered_segments']
-                    logger.info(f"✅ MOS filter: {len(segments)} segments passed")
-                except Exception as e:
-                    return {
-                        'success': False,
-                        'error': f"MOS filter failed: {str(e)}"
-                    }
-            
-            # Step 4.5: Move approved segments to final directory
-            try:
-                final_segments_dir = self.session_dir / 'segments_aprovados'
-                final_segments_dir.mkdir(exist_ok=True)
-                
-                final_segments = []
-                for segment in segments:
-                    final_path = final_segments_dir / segment.name
-                    import shutil
-                    shutil.copy2(segment, final_path)
-                    final_segments.append(final_path)
-                
-                segments = final_segments
-                logger.info(f"✅ {len(segments)} segments moved to final approved directory")
-            except Exception as e:
-                logger.warning(f"⚠️ Could not move segments to final directory: {e}")
-            
-            # Step 5: Perform diarization
-            try:
-                diarization_result = self.perform_diarization(segments)
-                logger.info(f"✅ Diarization completed")
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': f"Diarization failed: {str(e)}"
-                }
-            
-            # Step 6: Detect overlaps
-            try:
-                overlap_result = self.detect_overlaps(segments)
-                logger.info(f"✅ Overlap detection completed")
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': f"Overlap detection failed: {str(e)}"
-                }
-            
-            # Step 7: Separate by speaker
-            try:
-                separation_result = self.separate_by_speaker(segments, diarization_result['rttm_path'])
-                logger.info(f"✅ Speaker separation completed")
-            except Exception as e:
-                return {
-                    'success': False,
-                    'error': f"Speaker separation failed: {str(e)}"
-                }
-            
-            # Files are kept locally for processing
-            logger.info(f"📁 Files saved locally in: {self.session_dir}")
-            
-            # Determine success based on whether we have processable content
-            success = len(segments) > 0 or len(separation_result.get('stt_files', [])) > 0
-            
-            return {
-                'success': success,
-                'video_url': video_url,
-                'audio_path': str(audio_path),
-                'segments_count': len(segments),
-                'speakers_count': diarization_result.get('speakers_count', 0),
-                'overlaps_count': overlap_result.get('overlaps_count', 0),
-                'stt_files': separation_result.get('stt_files', []),
-                'gcp_upload': upload_result,
-                'warning': f"Video too short for segmentation ({len(segments)} segments)" if len(segments) == 0 else None
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Error processing video {video_url}: {e}")
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    def _extract_video_id(self, video_url: str) -> str:
-        """Extract YouTube video ID from URL."""
-        import re
-        
-        # YouTube URL patterns
-        patterns = [
-            r'(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})',
-            r'youtube\.com/embed/([a-zA-Z0-9_-]{11})',
-            r'youtube\.com/v/([a-zA-Z0-9_-]{11})'
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, video_url)
-            if match:
-                return match.group(1)
-        
-        # Fallback: use hash of URL
-        import hashlib
-        return hashlib.md5(video_url.encode()).hexdigest()[:11]
     
     def perform_diarization(self, segments: List[Path], num_speakers: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -767,7 +561,7 @@ class AudioProcessingPipeline:
         
         #Validação do áudio de entrada
         if not audio_path.exists():
-            logger.error(f"❌ Audio file does not exist: {audio_path}")
+            logger.error(f"❌ Audio directory does not exist: {audio_path}")
             return {'success': False, 'error': f"Audio file does not exist: {audio_path}"}
         
         flac_files = list(audio_path.glob('*.flac'))
@@ -783,9 +577,9 @@ class AudioProcessingPipeline:
             session_dir = self.create_session(session_name_resolved)
             
             # Step 1: Segment
-            segments = self.segment_audio(audio_path, use_intelligent_segmentation)
+            segments = self.segment_audio(source_audio_path, use_intelligent_segmentation)
             
-            # Step 3: Apply completeness filter (DISABLED - moved to separate file)
+            # Step 2: Apply completeness filter (DISABLED - moved to separate file)
             # Completeness filter is now in src/audio_completeness_filter.py
             # if self.enable_completeness_filter:
             #     completeness_rejected_dir = session_dir / 'audio_descartado_completude'
@@ -793,7 +587,7 @@ class AudioProcessingPipeline:
             #     segments = completeness_result['complete_segments']
             #     logger.info(f"✅ Completeness filter: {len(segments)} segments passed (filtered {completeness_result['cut_count']} cut segments)")
             
-            # Step 4: Apply MOS filter
+            # Step 3: Apply MOS filter
             if self.enable_mos_filter:
                 try:
                     mos_rejected_dir = session_dir / 'audio_descartado_mos'
@@ -804,19 +598,19 @@ class AudioProcessingPipeline:
                     logger.error(f"❌ MOS filter failed: {e}")
                     return {'success': False, 'error': f"MOS filter failed: {str(e)}"}
             
-            # Step 5: Diarization (ANTES do STT)
+            # Step 4: Diarization (ANTES do STT)
             diarization_results = self.perform_diarization(segments, num_speakers)
             
-            # Step 6: Overlap detection (ANTES do STT)
+            # Step 5: Overlap detection (ANTES do STT)
             clean_segments, overlapping_segments = self.detect_overlaps(segments)
             
-            # Step 7: Speaker separation (ANTES do STT)
+            # Step 6: Speaker separation (ANTES do STT)
             separation_results = self.separate_speakers(diarization_results, enhance_audio)
             
-            # Step 8: STT preparation (ANTES do STT)
+            # Step 7: STT preparation (ANTES do STT)
             stt_files = self.prepare_for_stt(separation_results)
             
-            # Step 9: Apply STT transcription
+            # Step 8: Apply STT transcription
             stt_result = {}
             if self.enable_stt:
                 try:
@@ -835,7 +629,7 @@ class AudioProcessingPipeline:
                     # Continue without STT if it fails
                     logger.warning("Continuing pipeline without STT transcription")
             
-            # Step 10: Move approved segments to final directory
+            # Step 09: Move approved segments to final directory
             try:
                 final_segments_dir = session_dir / 'segments_aprovados'
                 final_segments_dir.mkdir(exist_ok=True)
@@ -859,7 +653,6 @@ class AudioProcessingPipeline:
             results = {
                 'session_name': self.current_session,
                 'session_dir': str(session_dir),
-                'url': url,
                 'processing_time': processing_time,
                 'downloaded_audio': str(audio_path),
                 'num_segments': len(segments),
@@ -1555,10 +1348,8 @@ if __name__ == "__main__":
     
     pipeline = AudioProcessingPipeline()
     
-    # Example: process a YouTube video
-    # results = pipeline.process_local_audio(
-    #     "https://www.youtube.com/watch?v=example",
-    #     custom_filename="example_video",
-    #     num_speakers=2
-    # )
-    # print(f"Pipeline results: {results['statistics']}")
+    # Example: process a audio file
+    results = pipeline.process_local_audio(
+         r"C:\Igor\BIA\Alcateia\Katube_2025_new\katube-novo\BZ-QBv4Vc5k_chunk_00.flac"
+    )
+    print(f"Pipeline results: {results['statistics']}")

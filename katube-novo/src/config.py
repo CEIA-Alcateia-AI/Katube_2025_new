@@ -10,8 +10,6 @@ load_dotenv()
 
 class Config:
     # Audio settings
-    AUDIO_FORMAT = os.getenv('AUDIO_FORMAT', 'flac')
-    AUDIO_QUALITY = os.getenv('AUDIO_QUALITY', 'best')
     SAMPLE_RATE = int(os.getenv('SAMPLE_RATE', '24000'))
     SEGMENT_MIN_DURATION = float(os.getenv('SEGMENT_MIN_DURATION', '10.0'))
     SEGMENT_MAX_DURATION = float(os.getenv('SEGMENT_MAX_DURATION', '15.0'))
@@ -32,16 +30,10 @@ class Config:
     MOS_THRESHOLD = float(os.getenv('MOS_THRESHOLD', '3.0'))  # Minimum MOS score to accept
     # ENABLE_MOS_FILTER sempre True - filtro é obrigatório
     
-    # YouTube API settings
-    YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
-    
     # Directories
     BASE_DIR = Path(__file__).parent.parent
     AUDIOS_BAIXADOS_DIR = Path(os.getenv('AUDIOS_BAIXADOS_DIR', r'C:\Users\Usuário\Desktop\katube-novo\audios_baixados'))
     OUTPUT_DIR = AUDIOS_BAIXADOS_DIR / "output"
-    
-    # YouTube download settings
-    YOUTUBE_FORMAT = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worst"
     
     # STT preparation settings
     MAX_SEGMENT_SIZE = 25 * 1024 * 1024  # 25MB max per segment for STT

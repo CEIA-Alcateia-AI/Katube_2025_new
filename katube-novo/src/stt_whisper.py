@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
-from .naming_utils import extract_base_name, generate_standard_name
+from naming_utils import extract_base_name, generate_standard_name
 
 logger = logging.getLogger(__name__)
 
