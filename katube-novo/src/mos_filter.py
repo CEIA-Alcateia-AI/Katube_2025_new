@@ -6,6 +6,7 @@ import torch
 import torchaudio
 import numpy as np
 import logging
+import shutil
 from pathlib import Path
 from typing import List, Tuple, Optional
 import warnings
@@ -64,7 +65,6 @@ class MOSQualityFilter:
                 
         except Exception as e:
             logger.error(f"❌ ERRO CRÍTICO: Não foi possível carregar o filtro MOS: {e}")
-            logger.error("🔧 Solução: pip install torch torchaudio")
             raise RuntimeError(f"Filtro MOS é OBRIGATÓRIO e falhou ao carregar: {e}")
     
     def _check_torch_availability(self) -> bool:
@@ -233,8 +233,6 @@ class MOSQualityFilter:
                 resampled = resampler(audio_tensor)
                 return resampled.numpy()
             else:
-                # Use librosa resampling
-                import librosa
                 return librosa.resample(audio, orig_sr=orig_sr, target_sr=target_sr)
         except Exception as e:
             logger.warning(f"⚠️ Resampling failed: {e}")
@@ -354,7 +352,7 @@ class MOSQualityFilter:
                 logger.info(f"📊 {segment_path.name}: MOS = {mos_score:.2f}")
                 
                 # Import naming utilities
-                from .naming_utils import extract_base_name, generate_standard_name
+                from naming_utils import extract_base_name, generate_standard_name
                 
                 # Extract base name and create standardized filename
                 base_name = extract_base_name(segment_path)
@@ -373,7 +371,6 @@ class MOSQualityFilter:
                             approved_path = approved_dir / approved_filename
                             
                             # Copy the approved file
-                            import shutil
                             shutil.copy2(segment_path, approved_path)
                             logger.debug(f"📁 Saved approved segment: {approved_filename}")
                         except Exception as e:
@@ -393,7 +390,6 @@ class MOSQualityFilter:
                             intermediate_path = intermediate_dir / intermediate_filename
                             
                             # Copy the intermediate file
-                            import shutil
                             shutil.copy2(segment_path, intermediate_path)
                             logger.debug(f"📁 Saved intermediate segment: {intermediate_filename}")
                         except Exception as e:
@@ -412,7 +408,6 @@ class MOSQualityFilter:
                             rejected_path = rejected_dir / rejected_filename
                             
                             # Copy the rejected file
-                            import shutil
                             shutil.copy2(segment_path, rejected_path)
                             logger.debug(f"📁 Saved rejected segment: {rejected_filename}")
                         except Exception as e:
@@ -432,8 +427,6 @@ class MOSQualityFilter:
                         rejected_dir.mkdir(parents=True, exist_ok=True)
                         error_filename = f"mos_error_{segment_path.name}"
                         error_path = rejected_dir / error_filename
-                        
-                        import shutil
                         shutil.copy2(segment_path, error_path)
                     except Exception as e:
                         logger.warning(f"⚠️ Could not save MOS error segment {segment_path.name}: {e}")
