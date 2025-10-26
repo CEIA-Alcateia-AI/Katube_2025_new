@@ -32,9 +32,14 @@ class Config:
     
     # Directories
     BASE_DIR = Path(__file__).parent.parent
-    AUDIOS_BAIXADOS_DIR = Path(os.getenv('AUDIOS_BAIXADOS_DIR', r'C:\Users\Usuário\Desktop\katube-novo\audios_baixados'))
-    OUTPUT_DIR = AUDIOS_BAIXADOS_DIR / "output"
-    
+    # Detecta diretório automaticamente ou usa variável de ambiente
+    if os.getenv('AUDIOS_BAIXADOS_DIR'):
+        AUDIOS_BAIXADOS_DIR = Path(os.getenv('AUDIOS_BAIXADOS_DIR'))
+    else:
+        # Usa pasta relativa ao projeto (funciona em qualquer SO)
+        AUDIOS_BAIXADOS_DIR = BASE_DIR / 'audios_baixados'
+        OUTPUT_DIR = AUDIOS_BAIXADOS_DIR / "output"
+        
     # STT preparation settings
     MAX_SEGMENT_SIZE = 25 * 1024 * 1024  # 25MB max per segment for STT
     

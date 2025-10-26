@@ -4,6 +4,8 @@ Final normalization using Sox for audio quality standardization
 """
 import os
 import subprocess
+import shutil
+import platform
 import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -42,15 +44,23 @@ class SoxNormalizer:
     def _check_sox(self):
         """Check if Sox is available in the system."""
         # Try to find Sox executable in common locations
-        sox_paths = [
-            'sox',  # Try PATH first
-            r'C:\Program Files\Chris Bagwell\SoX\sox.exe',
-            r'C:\Program Files (x86)\Chris Bagwell\SoX\sox.exe',
-            # WinGet installation path pattern
-            os.path.join(os.getenv('LOCALAPPDATA', ''), 'Microsoft', 'WinGet', 'Packages', 'ChrisBagwell.SoX_Microsoft.Winget.Source_8wekyb3d8bbwe', 'sox-14.4.2', 'sox.exe'),
-            # Alternative WinGet path
-            os.path.expanduser(r'~\AppData\Local\Microsoft\WinGet\Packages\ChrisBagwell.SoX_Microsoft.Winget.Source_8wekyb3d8bbwe\sox-14.4.2\sox.exe')
+
+
+    # Tenta encontrar Sox no PATH primeiro (funciona em Linux e Windows)
+    sox_executable = shutil.which('sox')
+
+    if not sox_executable and platform.system() == 'Windows':
+        # Se não encontrou no PATH e está no Windows, tenta locais comuns
+        windows_paths = [
+            Path('C:/Program Files/Chris Bagwell/SoX/sox.exe'),
+            Path('C:/Program Files (x86)/Chris Bagwell/SoX/sox.exe'),
+            Path(os.getenv('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Packages' / 'ChrisBagwell.SoX_Microsoft.Winget.Source_8wekyb3d8bbwe' / 'sox-14.4.2' / 'sox.exe',
         ]
+        
+        for path in windows_paths:
+            if path.exists():
+                sox_executable = str(path)
+                break
         
         sox_found = False
         sox_executable = None
