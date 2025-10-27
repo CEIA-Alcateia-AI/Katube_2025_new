@@ -54,25 +54,37 @@ class EnhancedDiarizer:
             return
     
     def preprocess_audio(self, audio_path: Path) -> Tuple[torch.Tensor, int]:
-        """Preprocess audio for diarization."""
+        """
+        Preprocess audio for diarization using soundfile backend 
+        to bypass torchcodec/ffmpeg issues.
+        """
         try:
-            # Load audio
-            waveform, sample_rate = torchaudio.load(audio_path)
+            # <--- FIX: Carrega com soundfile para evitar erros do AudioDecoder
+            waveform_np, sample_rate = sf.read(audio_path, dtype='float32')
             
-            # Convert to mono if stereo
+            # Converte para tensor
+            waveform = torch.from_numpy(waveform_np)
+            
+            # Garante o formato [canais, amostras]
+            if waveform.ndim == 1:
+                waveform = waveform.unsqueeze(0) # [amostras] -> [1, amostras]
+            else:
+                waveform = waveform.T # [amostras, canais] -> [canais, amostras]
+            
+            # Converte para mono se estéreo
             if waveform.shape[0] > 1:
                 waveform = torch.mean(waveform, dim=0, keepdim=True)
             
-            # Resample if necessary
+            # Resample se necessário
             if sample_rate != self.sample_rate:
                 resampler = torchaudio.transforms.Resample(sample_rate, self.sample_rate)
                 waveform = resampler(waveform)
                 sample_rate = self.sample_rate
             
-            # Normalize
+            # Normaliza
             waveform = waveform / torch.max(torch.abs(waveform))
             
-            # Move to device
+            # Move para o device
             waveform = waveform.to(self.device)
             
             return waveform, sample_rate
@@ -99,25 +111,26 @@ class EnhancedDiarizer:
             
         logger.info(f"Diarizing {audio_path.name}")
         
-        # Preprocess audio
+        # 1. Pré-processa o áudio (agora usando o método corrigido com soundfile)
         waveform, sample_rate = self.preprocess_audio(audio_path)
         
-        # Prepare input for pipeline
+        # 2. Prepara o input para o pipeline
         audio_input = {
             "waveform": waveform,
             "sample_rate": sample_rate
         }
-        
-        # Add speaker count hint if provided
+
+        pipeline_params = {}
         if num_speakers is not None:
-            # pyannote.audio 3.x way to set number of speakers
-            self.pipeline.instantiate({"clustering": {"num_clusters": num_speakers}})
+            pipeline_params["num_speakers"] = num_speakers
+            logger.info(f"Hinting pipeline with num_speakers={num_speakers}")
         
-        # Run diarization
+        # 3. Executa a diarização
         try:
-            diarization = self.pipeline(audio_input)
-            logger.info(f"Diarization completed: {len(diarization.labels())} speakers detected")
-            return diarization
+            diarization_output = self.pipeline(audio_input, **pipeline_params)
+            annotation = diarization_output.speaker_diarization
+            logger.info(f"Diarization completed: {len(annotation.labels())} speakers detected")
+            return annotation
             
         except Exception as e:
             logger.error(f"Diarization failed for {audio_path}: {e}")
@@ -132,8 +145,7 @@ class EnhancedDiarizer:
                 'START': segment.start,
                 'END': segment.end,
                 'DURATION': segment.duration,
-                'SPEAKER': speaker,
-                'CONFIDENCE': 1.0  # pyannote doesn't provide confidence in this version
+                'SPEAKER': speaker
             })
         
         df = pd.DataFrame(segments_data)
@@ -141,12 +153,6 @@ class EnhancedDiarizer:
         if not df.empty:
             # Sort by start time
             df = df.sort_values('START').reset_index(drop=True)
-            
-            # Add additional metrics
-            if audio_duration is not None:
-                df['RELATIVE_START'] = df['START'] / audio_duration
-                df['RELATIVE_END'] = df['END'] / audio_duration
-        
         return df
     
     def save_rttm(self, annotation: Annotation, output_path: Path, audio_filename: str):
@@ -327,5 +333,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
     diarizer = EnhancedDiarizer()
-    # results = diarizer.diarize_batch([Path("input.flac")], Path("output/"))
-    # print(f"Diarization results: {results}")
+    results = diarizer.diarize_batch([Path(r"C:\Igor\BIA\Alcateia\Katube_2025_new\teste_2\LowuyZ3_B84.flac")], Path(r"output/"))
+    print(f"Diarization results: {results}")

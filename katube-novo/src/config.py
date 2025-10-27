@@ -20,7 +20,7 @@ class Config:
     HUGGINGFACE_TOKEN = os.getenv('HUGGINGFACE_TOKEN')
     
     # Voice overlap detection
-    OVERLAP_THRESHOLD = float(os.getenv('OVERLAP_THRESHOLD', '0.9'))  # Increased from 0.5 to 0.9 (90% overlap required to classify as overlapping)
+    OVERLAP_THRESHOLD = float(os.getenv('OVERLAP_THRESHOLD', '0.9'))  
     MIN_SPEECH_DURATION = float(os.getenv('MIN_SPEECH_DURATION', '0.5'))
     
     # Audio segmentation limits
