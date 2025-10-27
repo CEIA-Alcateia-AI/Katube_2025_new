@@ -29,7 +29,7 @@ class Config:
     # MOS Quality Filter settings (OBRIGATÓRIO)
     MOS_THRESHOLD = float(os.getenv('MOS_THRESHOLD', '3.0'))  # Minimum MOS score to accept
     # ENABLE_MOS_FILTER sempre True - filtro é obrigatório
-    
+    AUDIO_FORMAT = 'flac'  # ou 'wav'
     # Directories
     BASE_DIR = Path(__file__).parent.parent
     # Detecta diretório automaticamente ou usa variável de ambiente

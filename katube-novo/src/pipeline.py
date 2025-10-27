@@ -18,7 +18,7 @@ from speaker_separator import SpeakerSeparator
 from stt_whisper import WhisperSTTTranscriber
 from stt_wav2vec2 import WAV2VEC2STTTranscriber
 from audio_normalizer import AudioNormalizer
-from validation import create_validation_file
+from src.marcos_validation.text_normalizer import process_stt_results as normalize_stt_texts
 from marcos_validation.validador_transcricao import create_validation_file as marcos_create_validation_file
 from denoiser import Denoiser
 from sox_normalizer import SoxNormalizer
@@ -507,7 +507,26 @@ class AudioProcessingPipeline:
             }
             
             logger.info(f"Transcription completed: {combined_results['whisper_count']} Whisper, {combined_results['wav2vec2_count']} WAV2VEC2")
-            
+                 # Step 7.5: Normalize STT texts for validation
+            logger.info("=== STEP 7.5: NORMALIZING STT TEXTS ===")
+            try:
+                normalization_result = normalize_stt_texts(str(self.session_dir))
+                
+                if normalization_result.get('success'):
+                    logger.info(f"Text normalization completed:")
+                    logger.info(f"   - Total videos: {normalization_result.get('total_videos', 0)}")
+                    logger.info(f"   - Total segments: {normalization_result.get('total_segments', 0)}")
+                    logger.info(f"   - Output files: {len(normalization_result.get('output_files', []))}")
+                    
+                    combined_results['normalization'] = normalization_result
+                else:
+                    logger.warning(f"Text normalization failed: {normalization_result.get('error')}")
+                    combined_results['normalization'] = {"error": normalization_result.get('error')}
+                    
+            except Exception as e:
+                logger.error(f"Error in text normalization: {e}")
+                combined_results['normalization'] = {"error": str(e)}
+
             # Step 8: Validate STT transcriptions
             if whisper_results and wav2vec2_results:
                 validation_result = self.validate_stt_transcriptions(
@@ -614,7 +633,15 @@ class AudioProcessingPipeline:
             stt_result = {}
             if self.enable_stt:
                 try:
-                    stt_result = self.transcribe_audio_segments(stt_files if stt_files else segments)
+                    # Flatten stt_files dictionary to list of paths
+                    segment_paths = []
+                    if stt_files:
+                        for speaker_files in stt_files.values():
+                            segment_paths.extend(speaker_files)
+                    else:
+                        segment_paths = segments
+
+                    stt_result = self.transcribe_audio_segments(segment_paths)
                     logger.info(f"✅ STT transcription completed: {stt_result.get('whisper_count', 0)} Whisper, {stt_result.get('wav2vec2_count', 0)} WAV2VEC2")
                     
                     # Check if validation and filtering were applied
@@ -633,14 +660,23 @@ class AudioProcessingPipeline:
             try:
                 final_segments_dir = session_dir / 'segments_aprovados'
                 final_segments_dir.mkdir(exist_ok=True)
-                
+                                
                 final_segments = []
-                segments_to_move = stt_files if stt_files else segments
+                import shutil
+
+                # Flatten stt_files dictionary to list if needed
+                if stt_files:
+                    segments_to_move = []
+                    for speaker_files in stt_files.values():
+                        segments_to_move.extend(speaker_files)
+                else:
+                    segments_to_move = segments
+
                 for segment in segments_to_move:
-                    final_path = final_segments_dir / segment.name
-                    import shutil
-                    shutil.copy2(segment, final_path)
-                    final_segments.append(final_path)
+                    if isinstance(segment, Path):
+                        final_path = final_segments_dir / segment.name
+                        shutil.copy2(segment, final_path)
+                        final_segments.append(final_path)
                 
                 segments = final_segments
                 logger.info(f"✅ {len(segments)} segments moved to final approved directory")
@@ -677,7 +713,7 @@ class AudioProcessingPipeline:
             logger.info(f"Results saved to: {results_file}")
             
             logger.info("===\n\n\n LIMPEZA DE DIRETÓRIOS INTERMEDIÁRIOS ===")
-            self.cleanup(stages_to_clean=["downloads", "audio_rejeitado_validacao","segments", "stt_ready","stt_results\STT-wav2vec2", "stt_results\STT-whisper", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
+            #self.cleanup(stages_to_clean=["downloads", "audio_rejeitado_validacao","segments", "stt_ready","stt_results\STT-wav2vec2", "stt_results\STT-whisper", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
 
             return results
             
@@ -1114,8 +1150,13 @@ class AudioProcessingPipeline:
         return base_name
     
     def _prepare_for_json(self, obj):
-        """Recursively convert Path objects to strings for JSON serialization."""
+        """Recursively convert Path objects and Annotation objects to strings for JSON serialization."""
+        from pyannote.core import Annotation
+        
         if isinstance(obj, Path):
+            return str(obj)
+        elif isinstance(obj, Annotation):
+            # Convert Annotation to string representation or skip it
             return str(obj)
         elif isinstance(obj, dict):
             return {k: self._prepare_for_json(v) for k, v in obj.items()}

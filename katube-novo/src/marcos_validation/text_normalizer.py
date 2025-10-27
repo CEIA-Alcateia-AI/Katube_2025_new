@@ -1,44 +1,54 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
-# Normalizador de Texto para Testes de Similaridade
-# Baseado nos scripts text_normalization.py e transcription_normalizer.py
-# Filosofia KISS - simples e funcional
-#
+"""
+Normalizador de Texto para Testes de Similaridade
+"""
 
 import os
 import re
 import json
 import unicodedata
+import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Dict, List, Tuple
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Mapeamento de caracteres especiais para português
-chars_map = {
-    'ï': 'i', 'ù': 'u', 'ö': 'o', 'î': 'i', 'ñ': 'n', 
-    'ë': 'e', 'ì': 'i', 'ò': 'o', 'ů': 'u', 'ẽ': 'e', 
+CHARS_MAP = str.maketrans({
+    'ï': 'i', 'ù': 'u', 'ö': 'o', 'î': 'i', 'ñ': 'n',
+    'ë': 'e', 'ì': 'i', 'ò': 'o', 'ů': 'u', 'ẽ': 'e',
     'ü': 'u', 'è': 'e', 'æ': 'a', 'å': 'a', 'ø': 'o',
     'þ': 't', 'ð': 'd', 'ß': 's', 'ł': 'l', 'đ': 'd',
     'ć': 'c', 'č': 'c', 'š': 's', 'ž': 'z', 'ý': 'y'
-}
+})
 
-def apply_char_mapping(text):
+def apply_char_mapping(text: str) -> str:
     """
-    Aplica mapeamento de caracteres especiais
+    Aplica mapeamento de caracteres especiais usando str.translate (mais eficiente)
+    
+    Args:
+        text: Texto para aplicar mapeamento
+        
+    Returns:
+        Texto com caracteres mapeados
     """
-    for special_char, normal_char in chars_map.items():
-        text = text.replace(special_char, normal_char)
-    return text
-try:
-    from utils.number_to_text import number_to_text
-    HAS_NUMBER_TO_TEXT = True
-except ImportError:
-    HAS_NUMBER_TO_TEXT = False
-    print("Módulo utils.number_to_text não encontrado. Usando conversão simples.")
+    return text.translate(CHARS_MAP)
 
-def number_to_words_pt(num):
+
+def number_to_words_pt(num: int) -> str:
     """
     Converte número para extenso em português
+    Suporta números de 0 até 999.999.999
+    
+    Args:
+        num: Número inteiro para converter
+        
+    Returns:
+        Número por extenso em português
     """
     if num == 0:
         return "zero"
@@ -87,16 +97,45 @@ def number_to_words_pt(num):
             result = number_to_words_pt(thousands) + " mil"
         
         if remainder > 0:
-            result += " e " + number_to_words_pt(remainder)
+            # Usa "e" apenas se o resto for menor que 100
+            if remainder < 100:
+                result += " e " + number_to_words_pt(remainder)
+            else:
+                result += " " + number_to_words_pt(remainder)
         
         return result
     
-    # Para números maiores, retorna o número original
+    if num < 1000000000:
+        millions = num // 1000000
+        remainder = num % 1000000
+        
+        if millions == 1:
+            result = "um milhão"
+        else:
+            result = number_to_words_pt(millions) + " milhões"
+        
+        if remainder > 0:
+            if remainder < 100:
+                result += " e " + number_to_words_pt(remainder)
+            else:
+                result += " " + number_to_words_pt(remainder)
+        
+        return result
+    
+    # Para números maiores que 999.999.999, retorna o número original
     return str(num)
 
-def ordinal_to_words_pt(num, gender='m'):
+
+def ordinal_to_words_pt(num: int, gender: str = 'm') -> str:
     """
     Converte número ordinal para extenso em português
+    
+    Args:
+        num: Número ordinal
+        gender: Gênero ('m' para masculino, 'f' para feminino)
+        
+    Returns:
+        Ordinal por extenso
     """
     # Ordinais básicos masculinos
     ordinals_m = {
@@ -129,14 +168,19 @@ def ordinal_to_words_pt(num, gender='m'):
     if num in ordinals:
         return ordinals[num]
     
-    # Para números não mapeados, usa o cardinal + "º/ª"
-    cardinal = number_to_words_pt(num)
-    suffix = "ª" if gender == 'f' else "º"
-    return f"{cardinal}{suffix}"
+    # Para números não mapeados, usa o cardinal
+    return number_to_words_pt(num)
 
-def advanced_number_to_text(text):
+
+def advanced_number_to_text(text: str) -> str:
     """
     Conversão avançada de números e símbolos para texto
+    
+    Args:
+        text: Texto com números e símbolos
+        
+    Returns:
+        Texto com números convertidos para extenso
     """
     result = text
     
@@ -148,11 +192,10 @@ def advanced_number_to_text(text):
         return ordinal_to_words_pt(num, gender)
     
     # Regex para ordinais: 1º, 2ª, 15º, etc.
-    result = re.sub(r'(\d+)([ºª°])', replace_ordinal, result)
+    result = re.sub(r'(\d+)([ºªº°])', replace_ordinal, result)
     
     # Trata números decimais (ex: 20,50 ou 1.5)
     def replace_decimal(match):
-        full_match = match.group(0)
         integer_part = match.group(1)
         separator = match.group(2)
         decimal_part = match.group(3)
@@ -202,16 +245,31 @@ def advanced_number_to_text(text):
     
     return result
 
-def remove_html_tags(text):
+
+def remove_html_tags(text: str) -> str:
     """
     Remove tags HTML usando regex
+    
+    Args:
+        text: Texto com possíveis tags HTML
+        
+    Returns:
+        Texto sem tags HTML
     """
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
 
-def text_cleaning(text):
+
+def text_cleaning(text: str) -> str:
     """
-    Limpeza e normalização de texto baseada nos scripts originais
+    Limpeza e normalização de texto
+    IMPORTANTE: Apenas padroniza formato, não corrige ortografia
+    
+    Args:
+        text: Texto para limpar
+        
+    Returns:
+        Texto limpo e normalizado
     """
     if not text or text.strip() == "":
         return ""
@@ -248,32 +306,40 @@ def text_cleaning(text):
     
     return text
 
-def normalize_text(text):
+
+def normalize_text(text: str) -> Optional[str]:
     """
     Normalização completa do texto
+    IMPORTANTE: Apenas padroniza, não corrige conteúdo
+    
+    Args:
+        text: Texto para normalizar
+        
+    Returns:
+        Texto normalizado ou None se vazio
     """
     if not text or text.strip() == "":
         return None
     
     # Converte números para texto
-    if HAS_NUMBER_TO_TEXT:
-        try:
-            text = number_to_text(text)
-        except Exception as e:
-            print(f"Erro na conversão de números: {e}")
-            text = advanced_number_to_text(text)
-    else:
-        text = advanced_number_to_text(text)
+    text = advanced_number_to_text(text)
     
     # Aplica limpeza
     normalized = text_cleaning(text)
     
     return normalized if normalized else None
 
-def extract_file_info(filename):
+
+def extract_file_info(filename: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Extrai informações do nome do arquivo dinamicamente
     Padrão: {video_id}_..._segment_{000}_.._{modelo}.txt
+    
+    Args:
+        filename: Nome do arquivo
+        
+    Returns:
+        Tupla (video_id, segment_number, modelo)
     """
     # Remove extensão
     name = filename.replace('.txt', '')
@@ -302,9 +368,16 @@ def extract_file_info(filename):
     
     return video_id, segment_number, modelo
 
-def read_text_file(filepath):
+
+def read_text_file(filepath: Path) -> Optional[str]:
     """
     Lê arquivo de texto com tratamento de encoding
+    
+    Args:
+        filepath: Caminho do arquivo
+        
+    Returns:
+        Conteúdo do arquivo ou None em caso de erro
     """
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -315,32 +388,179 @@ def read_text_file(filepath):
             with open(filepath, 'r', encoding='latin-1') as f:
                 return f.read().strip()
         except Exception as e:
-            print(f"Erro ao ler {filepath}: {e}")
+            logger.error(f"Erro ao ler {filepath}: {e}")
             return None
     except Exception as e:
-        print(f"Erro ao ler {filepath}: {e}")
+        logger.error(f"Erro ao ler {filepath}: {e}")
         return None
 
-def process_folder(folder_path):
+
+def find_stt_directories(session_dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
     """
-    Processa uma pasta com arquivos de transcrição
+    Busca automaticamente os diretórios STT-whisper e STT-wav2vec2
+    
+    Args:
+        session_dir: Diretório da sessão
+        
+    Returns:
+        Tupla (whisper_dir, wav2vec2_dir)
     """
-    folder_path = Path(folder_path)
+    # Padrão esperado: session_dir/stt_results/stt_results/
+    stt_base = session_dir / 'stt_results' / 'stt_results'
     
-    if not folder_path.exists():
-        print(f"Pasta não encontrada: {folder_path}")
-        return False
+    if not stt_base.exists():
+        # Tenta alternativa: session_dir/stt_results/
+        stt_base = session_dir / 'stt_results'
     
-    print(f"Processando pasta: {folder_path}")
+    whisper_dir = stt_base / 'STT-whisper'
+    wav2vec2_dir = stt_base / 'STT-wav2vec2'
     
-    # Busca todos os arquivos .txt
-    txt_files = list(folder_path.glob("*.txt"))
+    # Verifica se os diretórios existem
+    whisper_exists = whisper_dir.exists() and whisper_dir.is_dir()
+    wav2vec2_exists = wav2vec2_dir.exists() and wav2vec2_dir.is_dir()
+    
+    return (whisper_dir if whisper_exists else None,
+            wav2vec2_dir if wav2vec2_exists else None)
+
+
+def find_all_sessions(base_dir: str = "audios_baixados/output") -> List[Path]:
+    """
+    Busca todas as sessões disponíveis automaticamente
+    
+    Args:
+        base_dir: Diretório base onde estão as sessões
+        
+    Returns:
+        Lista de caminhos das sessões encontradas
+    """
+    base_path = Path(base_dir)
+    
+    if not base_path.exists():
+        logger.warning(f"Diretório base não encontrado: {base_path}")
+        return []
+    
+    # Busca todas as pastas que contenham stt_results
+    sessions = []
+    
+    for item in base_path.iterdir():
+        if item.is_dir():
+            # Verifica se tem stt_results dentro
+            stt_path = item / 'stt_results'
+            if stt_path.exists():
+                sessions.append(item)
+                logger.debug(f"Sessão encontrada: {item.name}")
+    
+    return sessions
+
+
+def process_all_sessions(base_dir: str = "audios_baixados/output") -> Dict:
+    """
+    Processa todas as sessões encontradas automaticamente
+    
+    Args:
+        base_dir: Diretório base onde estão as sessões
+        
+    Returns:
+        Dicionário com resultados do processamento de todas as sessões
+    """
+    logger.info("Buscando sessões automaticamente...")
+    
+    sessions = find_all_sessions(base_dir)
+    
+    if not sessions:
+        error_msg = f"Nenhuma sessão encontrada em {base_dir}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    logger.info(f"Encontradas {len(sessions)} sessões para processar")
+    
+    results = {
+        "success": True,
+        "total_sessions": len(sessions),
+        "processed_sessions": [],
+        "failed_sessions": []
+    }
+    
+    for session_path in sessions:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Processando sessão: {session_path.name}")
+        logger.info(f"{'='*60}")
+        
+        result = process_stt_results(str(session_path))
+        
+        if result["success"]:
+            results["processed_sessions"].append({
+                "session_name": session_path.name,
+                "session_path": str(session_path),
+                "output_files": result["output_files"],
+                "total_videos": result["total_videos"],
+                "total_segments": result["total_segments"]
+            })
+        else:
+            results["failed_sessions"].append({
+                "session_name": session_path.name,
+                "session_path": str(session_path),
+                "error": result.get("error")
+            })
+    
+    # Resumo final
+    logger.info(f"\n{'='*60}")
+    logger.info("RESUMO DO PROCESSAMENTO")
+    logger.info(f"{'='*60}")
+    logger.info(f"Total de sessões: {results['total_sessions']}")
+    logger.info(f"Processadas com sucesso: {len(results['processed_sessions'])}")
+    logger.info(f"Falharam: {len(results['failed_sessions'])}")
+    
+    return results
+
+
+def process_stt_results(session_dir: str) -> Dict:
+    """
+    Processa resultados STT de uma sessão automaticamente
+    Busca arquivos .txt nos diretórios STT-whisper e STT-wav2vec2
+    
+    Args:
+        session_dir: Diretório da sessão (ex: "audios_baixados/output/teste_com_token")
+        
+    Returns:
+        Dicionário com resultado do processamento
+    """
+    session_path = Path(session_dir)
+    
+    if not session_path.exists():
+        error_msg = f"Diretório da sessão não encontrado: {session_path}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    logger.info(f"Processando sessão: {session_path}")
+    
+    # Busca diretórios STT automaticamente
+    whisper_dir, wav2vec2_dir = find_stt_directories(session_path)
+    
+    if not whisper_dir and not wav2vec2_dir:
+        error_msg = "Nenhum diretório STT encontrado"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    # Coleta todos os arquivos .txt
+    txt_files = []
+    
+    if whisper_dir:
+        whisper_files = list(whisper_dir.glob("*.txt"))
+        txt_files.extend(whisper_files)
+        logger.info(f"Encontrados {len(whisper_files)} arquivos Whisper")
+    
+    if wav2vec2_dir:
+        wav2vec2_files = list(wav2vec2_dir.glob("*.txt"))
+        txt_files.extend(wav2vec2_files)
+        logger.info(f"Encontrados {len(wav2vec2_files)} arquivos WAV2VEC2")
     
     if not txt_files:
-        print("Nenhum arquivo .txt encontrado na pasta")
-        return False
+        error_msg = "Nenhum arquivo .txt encontrado"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
     
-    print(f"Encontrados {len(txt_files)} arquivos .txt")
+    logger.info(f"Total de arquivos .txt: {len(txt_files)}")
     
     # Agrupa arquivos por video_id e segment
     grouped_files = {}
@@ -349,7 +569,7 @@ def process_folder(folder_path):
         video_id, segment_number, modelo = extract_file_info(txt_file.name)
         
         if not all([video_id, segment_number, modelo]):
-            print(f"Erro ao extrair informações de: {txt_file.name}")
+            logger.warning(f"Erro ao extrair informações de: {txt_file.name}")
             continue
         
         # Chave única para agrupar
@@ -366,8 +586,9 @@ def process_folder(folder_path):
             grouped_files[key][f"{modelo}_normalized"] = normalize_text(content)
     
     if not grouped_files:
-        print("Nenhum arquivo válido processado")
-        return False
+        error_msg = "Nenhum arquivo válido processado"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
     
     # Agrupa por video_id para criar JSONs separados
     videos = {}
@@ -378,6 +599,8 @@ def process_folder(folder_path):
         videos[video_id][key] = data
     
     # Cria JSON para cada video_id
+    output_files = []
+    
     for video_id, segments in videos.items():
         normalized_pairs = {}
         valid_pairs = 0
@@ -386,10 +609,6 @@ def process_folder(folder_path):
         sorted_segments = sorted(segments.items(), key=lambda x: x[0])
         
         for segment_key, data in sorted_segments:
-            # Verifica se tem ambos os modelos
-            has_wav2vec2 = 'wav2vec2_original' in data
-            has_whisper = 'whisper_original' in data
-            
             normalized_pairs[segment_key] = {
                 'wav2vec2_original': data.get('wav2vec2_original'),
                 'wav2vec2_normalized': data.get('wav2vec2_normalized'),
@@ -415,53 +634,78 @@ def process_folder(folder_path):
             "normalized_pairs": normalized_pairs
         }
         
-        # Salva JSON
-        output_file = folder_path / f"{video_id}_normalized_text.json"
+        # Salva JSON no diretório stt_results
+        output_dir = session_path / 'stt_results'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = output_dir / f"{video_id}_normalized_text.json"
         
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(result, f, indent=2, ensure_ascii=False)
             
-            print(f"Arquivo salvo: {output_file}")
-            print(f"Video ID: {video_id}")
-            print(f"Total de segmentos: {len(normalized_pairs)}")
-            print(f"Pares válidos: {valid_pairs}")
-            print("-" * 50)
+            logger.info(f"Arquivo salvo: {output_file}")
+            logger.info(f"Video ID: {video_id}")
+            logger.info(f"Total de segmentos: {len(normalized_pairs)}")
+            logger.info(f"Pares válidos: {valid_pairs}")
+            logger.info("-" * 50)
+            
+            output_files.append(str(output_file))
             
         except Exception as e:
-            print(f"Erro ao salvar {output_file}: {e}")
-            return False
+            logger.error(f"Erro ao salvar {output_file}: {e}")
+            return {"success": False, "error": str(e)}
     
-    return True
+    return {
+        "success": True,
+        "output_files": output_files,
+        "total_videos": len(videos),
+        "total_segments": len(grouped_files)
+    }
+
 
 def main():
     """
-    Função principal
+    Função principal para uso standalone
     """
-    print("NORMALIZADOR DE TEXTO PARA SIMILARIDADE")
-    print("=" * 50)
+    import argparse
     
-    # Solicita caminho da pasta (compatível com qualquer SO)
-    folder_input = input("Digite o caminho da pasta com os arquivos .txt: ").strip()
+    parser = argparse.ArgumentParser(description='Normalizador de Texto para STT')
+    parser.add_argument('session_dir', type=str, nargs='?', default=None,
+                       help='Diretório da sessão específica (opcional). Se não fornecido, processa todas as sessões.')
+    parser.add_argument('--base-dir', type=str, default='audios_baixados/output',
+                       help='Diretório base onde estão as sessões (padrão: audios_baixados/output)')
+    parser.add_argument('--all', action='store_true',
+                       help='Processar todas as sessões automaticamente')
     
-    if not folder_input:
-        print("Caminho não fornecido. Saindo...")
-        return
+    args = parser.parse_args()
     
-    # Normaliza o caminho para o SO atual
-    folder_path = str(Path(folder_input).resolve())
+    logger.info("NORMALIZADOR DE TEXTO PARA SIMILARIDADE")
+    logger.info("=" * 50)
     
-    if not folder_path:
-        print("Caminho não fornecido. Saindo...")
-        return
+    # Se --all ou nenhum session_dir fornecido, processa todas as sessões
+    if args.all or args.session_dir is None:
+        logger.info("Modo: Processamento automático de todas as sessões")
+        result = process_all_sessions(args.base_dir)
+        
+        if result["success"]:
+            logger.info("\nProcessamento concluído!")
+            logger.info(f"Sessões processadas: {len(result['processed_sessions'])}")
+            if result['failed_sessions']:
+                logger.warning(f"Sessões com erro: {len(result['failed_sessions'])}")
+        else:
+            logger.error(f"Erro: {result.get('error')}")
     
-    # Processa a pasta
-    success = process_folder(folder_path)
-    
-    if success:
-        print("Processamento concluído com sucesso!")
+    # Caso contrário, processa sessão específica
     else:
-        print("Erro durante o processamento.")
+        logger.info(f"Modo: Processamento de sessão específica")
+        result = process_stt_results(args.session_dir)
+        
+        if result["success"]:
+            logger.info("Processamento concluído com sucesso!")
+            logger.info(f"Arquivos gerados: {len(result['output_files'])}")
+        else:
+            logger.error(f"Erro durante o processamento: {result.get('error')}")
+
 
 if __name__ == "__main__":
     main()

@@ -113,16 +113,31 @@ class EnhancedDiarizer:
             # pyannote.audio 3.x way to set number of speakers
             self.pipeline.instantiate({"clustering": {"num_clusters": num_speakers}})
         
+            # Run diarization
         # Run diarization
         try:
             diarization = self.pipeline(audio_input)
-            logger.info(f"Diarization completed: {len(diarization.labels())} speakers detected")
-            return diarization
+            
+            # pyannote 3.x retorna DiarizeOutput com Annotation dentro
+            if hasattr(diarization, 'speaker_diarization'):
+                # É DiarizeOutput (pyannote 3.x)
+                annotation = diarization.speaker_diarization
+                num_speakers = len(annotation.labels())
+                logger.info(f"Diarization completed: {num_speakers} speakers detected")
+                return annotation  # Retornar Annotation, não DiarizeOutput
+            else:
+                # É Annotation diretamente (versão antiga)
+                num_speakers = len(diarization.labels())
+                logger.info(f"Diarization completed: {num_speakers} speakers detected")
+                return diarization
             
         except Exception as e:
             logger.error(f"Diarization failed for {audio_path}: {e}")
             raise
-    
+
+
+
+
     def annotation_to_dataframe(self, annotation: Annotation, audio_duration: Optional[float] = None) -> pd.DataFrame:
         """Convert pyannote Annotation to pandas DataFrame."""
         segments_data = []
