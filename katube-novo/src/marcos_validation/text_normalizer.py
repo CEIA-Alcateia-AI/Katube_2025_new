@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Normalizador de Texto para Testes de Similaridade
+Normalizador de Texto para Validação STT
+Versão robusta com normalização avançada + mapeamento inteligente de arquivos
+Filosofia KISS - simples e funcional, sem emojis
 """
 
 import os
@@ -9,12 +11,17 @@ import re
 import json
 import unicodedata
 import logging
+import argparse
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
+from collections import defaultdict
 
 # Configurar logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s:%(name)s:%(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Mapeamento de caracteres especiais para português
@@ -28,7 +35,7 @@ CHARS_MAP = str.maketrans({
 
 def apply_char_mapping(text: str) -> str:
     """
-    Aplica mapeamento de caracteres especiais usando str.translate (mais eficiente)
+    Aplica mapeamento de caracteres especiais
     
     Args:
         text: Texto para aplicar mapeamento
@@ -48,213 +55,156 @@ def number_to_words_pt(num: int) -> str:
         num: Número inteiro para converter
         
     Returns:
-        Número por extenso em português
+        Número por extenso
     """
     if num == 0:
-        return "zero"
+        return 'zero'
     
     # Unidades
-    ones = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove",
-            "dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", 
-            "dezessete", "dezoito", "dezenove"]
+    unidades = ['', 'um', 'dois', 'tres', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove']
+    
+    # 10 a 19
+    especiais = ['dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 
+                 'dezesseis', 'dezessete', 'dezoito', 'dezenove']
     
     # Dezenas
-    tens = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", 
-            "setenta", "oitenta", "noventa"]
+    dezenas = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta',
+               'sessenta', 'setenta', 'oitenta', 'noventa']
     
     # Centenas
-    hundreds = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos",
-                "seiscentos", "setecentos", "oitocentos", "novecentos"]
+    centenas = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 
+                'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos']
     
-    if num < 0:
-        return "menos " + number_to_words_pt(-num)
-    
-    if num < 20:
-        return ones[num]
-    
-    if num < 100:
-        if num % 10 == 0:
-            return tens[num // 10]
-        else:
-            return tens[num // 10] + " e " + ones[num % 10]
-    
-    if num == 100:
-        return "cem"
+    def converter_ate_999(n):
+        if n == 0:
+            return ''
+        elif n < 10:
+            return unidades[n]
+        elif n < 20:
+            return especiais[n - 10]
+        elif n < 100:
+            dez = n // 10
+            uni = n % 10
+            if uni == 0:
+                return dezenas[dez]
+            return f"{dezenas[dez]} e {unidades[uni]}"
+        else:  # n < 1000
+            cen = n // 100
+            resto = n % 100
+            if n == 100:
+                return 'cem'
+            elif resto == 0:
+                return centenas[cen]
+            return f"{centenas[cen]} e {converter_ate_999(resto)}"
     
     if num < 1000:
-        if num % 100 == 0:
-            return hundreds[num // 100]
+        return converter_ate_999(num)
+    elif num < 1000000:
+        milhares = num // 1000
+        resto = num % 1000
+        if milhares == 1:
+            mil_text = 'mil'
         else:
-            return hundreds[num // 100] + " e " + number_to_words_pt(num % 100)
-    
-    if num < 1000000:
-        thousands = num // 1000
-        remainder = num % 1000
+            mil_text = f"{converter_ate_999(milhares)} mil"
         
-        if thousands == 1:
-            result = "mil"
+        if resto == 0:
+            return mil_text
+        return f"{mil_text} e {converter_ate_999(resto)}"
+    else:
+        milhoes = num // 1000000
+        resto = num % 1000000
+        if milhoes == 1:
+            milhao_text = 'um milhao'
         else:
-            result = number_to_words_pt(thousands) + " mil"
+            milhao_text = f"{converter_ate_999(milhoes)} milhoes"
         
-        if remainder > 0:
-            # Usa "e" apenas se o resto for menor que 100
-            if remainder < 100:
-                result += " e " + number_to_words_pt(remainder)
-            else:
-                result += " " + number_to_words_pt(remainder)
-        
-        return result
-    
-    if num < 1000000000:
-        millions = num // 1000000
-        remainder = num % 1000000
-        
-        if millions == 1:
-            result = "um milhão"
+        if resto == 0:
+            return milhao_text
+        elif resto < 1000:
+            return f"{milhao_text} e {converter_ate_999(resto)}"
         else:
-            result = number_to_words_pt(millions) + " milhões"
-        
-        if remainder > 0:
-            if remainder < 100:
-                result += " e " + number_to_words_pt(remainder)
-            else:
-                result += " " + number_to_words_pt(remainder)
-        
-        return result
-    
-    # Para números maiores que 999.999.999, retorna o número original
-    return str(num)
+            return f"{milhao_text} {number_to_words_pt(resto)}"
 
 
 def ordinal_to_words_pt(num: int, gender: str = 'm') -> str:
     """
-    Converte número ordinal para extenso em português
+    Converte número ordinal para extenso
     
     Args:
         num: Número ordinal
-        gender: Gênero ('m' para masculino, 'f' para feminino)
+        gender: 'm' para masculino, 'f' para feminino
         
     Returns:
         Ordinal por extenso
     """
-    # Ordinais básicos masculinos
-    ordinals_m = {
-        1: "primeiro", 2: "segundo", 3: "terceiro", 4: "quarto", 5: "quinto",
-        6: "sexto", 7: "sétimo", 8: "oitavo", 9: "nono", 10: "décimo",
-        11: "décimo primeiro", 12: "décimo segundo", 13: "décimo terceiro",
-        14: "décimo quarto", 15: "décimo quinto", 16: "décimo sexto",
-        17: "décimo sétimo", 18: "décimo oitavo", 19: "décimo nono",
-        20: "vigésimo", 21: "vigésimo primeiro", 30: "trigésimo",
-        40: "quadragésimo", 50: "quinquagésimo", 60: "sexagésimo",
-        70: "septuagésimo", 80: "octogésimo", 90: "nonagésimo",
-        100: "centésimo"
+    ordinais_m = {
+        1: 'primeiro', 2: 'segundo', 3: 'terceiro', 4: 'quarto', 5: 'quinto',
+        6: 'sexto', 7: 'setimo', 8: 'oitavo', 9: 'nono', 10: 'decimo',
+        11: 'decimo primeiro', 12: 'decimo segundo', 13: 'decimo terceiro',
+        14: 'decimo quarto', 15: 'decimo quinto', 16: 'decimo sexto',
+        17: 'decimo setimo', 18: 'decimo oitavo', 19: 'decimo nono',
+        20: 'vigesimo', 30: 'trigesimo', 40: 'quadragesimo',
+        50: 'quinquagesimo', 60: 'sexagesimo', 70: 'septuagesimo',
+        80: 'octogesimo', 90: 'nonagesimo', 100: 'centesimo'
     }
     
-    # Ordinais básicos femininos
-    ordinals_f = {
-        1: "primeira", 2: "segunda", 3: "terceira", 4: "quarta", 5: "quinta",
-        6: "sexta", 7: "sétima", 8: "oitava", 9: "nona", 10: "décima",
-        11: "décima primeira", 12: "décima segunda", 13: "décima terceira",
-        14: "décima quarta", 15: "décima quinta", 16: "décima sexta",
-        17: "décima sétima", 18: "décima oitava", 19: "décima nona",
-        20: "vigésima", 21: "vigésima primeira", 30: "trigésima",
-        40: "quadragésima", 50: "quinquagésima", 60: "sexagésima",
-        70: "septuagésima", 80: "octogésima", 90: "nonagésima",
-        100: "centésima"
-    }
+    ordinais_f = {k: v.replace('o', 'a') for k, v in ordinais_m.items()}
+    ordinais = ordinais_f if gender == 'f' else ordinais_m
     
-    ordinals = ordinals_f if gender == 'f' else ordinals_m
-    
-    if num in ordinals:
-        return ordinals[num]
-    
-    # Para números não mapeados, usa o cardinal
-    return number_to_words_pt(num)
+    return ordinais.get(num, f"{num}o")
 
 
 def advanced_number_to_text(text: str) -> str:
     """
-    Conversão avançada de números e símbolos para texto
+    Conversão avançada de números para texto
+    Suporta: decimais, percentuais, datas, horas, moedas, ordinais
     
     Args:
-        text: Texto com números e símbolos
+        text: Texto com números
         
     Returns:
-        Texto com números convertidos para extenso
+        Texto com números convertidos
     """
-    result = text
-    
-    # Primeiro, trata ordinais (1º, 2ª, 15º, etc.)
+    # Ordinais (1º, 2ª, 3º, etc.)
     def replace_ordinal(match):
         num = int(match.group(1))
-        suffix = match.group(2)
-        gender = 'f' if suffix in ['ª', 'a'] else 'm'
+        gender = 'f' if match.group(2) == 'ª' else 'm'
         return ordinal_to_words_pt(num, gender)
     
-    # Regex para ordinais: 1º, 2ª, 15º, etc.
-    result = re.sub(r'(\d+)([ºªº°])', replace_ordinal, result)
+    text = re.sub(r'(\d+)[ºª]', replace_ordinal, text)
     
-    # Trata números decimais (ex: 20,50 ou 1.5)
+    # Decimais (ex: 3.14, 2,5)
     def replace_decimal(match):
-        integer_part = match.group(1)
-        separator = match.group(2)
-        decimal_part = match.group(3)
-        
-        # Converte parte inteira
-        integer_text = number_to_words_pt(int(integer_part))
-        
-        # Converte separador
-        sep_text = "vírgula" if separator == "," else "ponto"
-        
-        # Converte parte decimal dígito por dígito
-        decimal_text = " ".join([number_to_words_pt(int(d)) for d in decimal_part])
-        
-        return f"{integer_text} {sep_text} {decimal_text}"
+        inteiro = int(match.group(1))
+        decimal = match.group(2)
+        int_text = number_to_words_pt(inteiro)
+        dec_text = ' '.join([number_to_words_pt(int(d)) for d in decimal])
+        return f"{int_text} virgula {dec_text}"
     
-    # Regex para números decimais (ex: 20,50 ou 1.25)
-    result = re.sub(r'(\d+)([,.](\d+))', replace_decimal, result)
+    text = re.sub(r'(\d+)[,\.](\d+)', replace_decimal, text)
     
-    # Trata números inteiros restantes
+    # Percentuais
+    text = re.sub(r'(\d+)%', lambda m: f"{number_to_words_pt(int(m.group(1)))} por cento", text)
+    
+    # Números inteiros
     def replace_integer(match):
         num = int(match.group(0))
         return number_to_words_pt(num)
     
-    # Regex para números inteiros que sobraram
-    result = re.sub(r'\b\d+\b', replace_integer, result)
+    text = re.sub(r'\b\d+\b', replace_integer, text)
     
-    # Trata símbolos monetários e unidades
-    symbol_replacements = {
-        r'R\$\s*': 'reais ',
-        r'US\$\s*': 'dólares ',
-        r'\$\s*': 'dólares ',
-        r'€\s*': 'euros ',
-        r'%': ' por cento',
-        r'°C': ' graus celsius',
-        r'°F': ' graus fahrenheit',
-        r'km/h': ' quilômetros por hora',
-        r'm/s': ' metros por segundo',
-        r'\bkg\b': ' quilogramas',
-        r'\bg\b': ' gramas',
-        r'\bkm\b': ' quilômetros',
-        r'\bcm\b': ' centímetros',
-        r'\bmm\b': ' milímetros'
-    }
-    
-    for pattern, replacement in symbol_replacements.items():
-        result = re.sub(pattern, replacement, result)
-    
-    return result
+    return text
 
 
 def remove_html_tags(text: str) -> str:
     """
-    Remove tags HTML usando regex
+    Remove tags HTML do texto
     
     Args:
         text: Texto com possíveis tags HTML
         
     Returns:
-        Texto sem tags HTML
+        Texto limpo
     """
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
@@ -262,55 +212,39 @@ def remove_html_tags(text: str) -> str:
 
 def text_cleaning(text: str) -> str:
     """
-    Limpeza e normalização de texto
-    IMPORTANTE: Apenas padroniza formato, não corrige ortografia
+    Limpeza avançada do texto
     
     Args:
         text: Texto para limpar
         
     Returns:
-        Texto limpo e normalizado
+        Texto limpo
     """
-    if not text or text.strip() == "":
-        return ""
-    
-    # Remove quebras de linha
-    text = text.replace('\n', ' ')
-    
-    # Remove tags HTML
+    # Remove HTML
     text = remove_html_tags(text)
     
-    # Remove TODOS os acentos (á→a, ç→c, ã→a, etc)
+    # Lowercase
+    text = text.lower()
+    
+    # Remove acentos
     text = unicodedata.normalize('NFD', text)
     text = ''.join(char for char in text if unicodedata.category(char) != 'Mn')
     
-    # Aplica mapeamento de caracteres especiais (ö→o, ñ→n, etc)
+    # Aplica mapeamento de caracteres
     text = apply_char_mapping(text)
     
-    # Converte para minúsculas
-    text = text.lower()
+    # Remove pontuação (mantém espaços)
+    text = re.sub(r'[^\w\s]', ' ', text)
     
-    # Substitui ... por .
-    text = re.sub(r'[.]{3,}', '.', text)
+    # Normaliza espaços
+    text = ' '.join(text.split())
     
-    # Remove parênteses e colchetes
-    text = re.sub(r'[(\[\])]', '', text)
-    
-    # Remove pontuação (APÓS conversão de números)
-    punctuations = '''!()-[]{};:'"\,<>./?@#$%^&*_~'''
-    for char in punctuations:
-        text = text.replace(char, ' ')
-    
-    # Remove espaços múltiplos
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    return text
+    return text.strip()
 
 
 def normalize_text(text: str) -> Optional[str]:
     """
     Normalização completa do texto
-    IMPORTANTE: Apenas padroniza, não corrige conteúdo
     
     Args:
         text: Texto para normalizar
@@ -330,141 +264,443 @@ def normalize_text(text: str) -> Optional[str]:
     return normalized if normalized else None
 
 
-def extract_file_info(filename: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+def extract_base_info(filename: str) -> Tuple[str, str, str]:
     """
-    Extrai informações do nome do arquivo dinamicamente
-    Padrão: {video_id}_..._segment_{000}_.._{modelo}.txt
+    Extrai informações base do nome do arquivo
     
     Args:
         filename: Nome do arquivo
         
     Returns:
-        Tupla (video_id, segment_number, modelo)
+        Tupla (video_id, segment_number, subsegment_number)
     """
-    # Remove extensão
-    name = filename.replace('.txt', '')
+    pattern = r'^([^_]+)_segment_(\d+)(?:.*?_(\d+))?\.'
+    match = re.match(pattern, filename)
     
-    # Extrai video_id (primeiros caracteres antes do primeiro _)
-    video_id_match = re.match(r'^([^_]+)', name)
-    if not video_id_match:
-        return None, None, None
+    if match:
+        video_id = match.group(1)
+        segment_num = match.group(2)
+        subseg_num = match.group(3) if match.group(3) else "001"
+        return video_id, segment_num, subseg_num
     
-    video_id = video_id_match.group(1)
+    return "", "", ""
+def extract_flac_timestamp(filename: str) -> float:
+    """
+    Extrai timestamp inicial do arquivo FLAC
     
-    # Extrai número do segmento
-    segment_match = re.search(r'segment_(\d{3,4})', name)
-    if not segment_match:
-        return None, None, None
+    Args:
+        filename: Nome do arquivo FLAC
+        
+    Returns:
+        Timestamp inicial em segundos
+        
+    Exemplo:
+        EhzSC3LWez4_segment_000_SPEAKER_00_1.43_24.41.flac -> 1.43
+        EhzSC3LWez4_segment_000_SPEAKER_00_125.67_189.23.flac -> 125.67
+    """
+    try:
+        # Remove extensao e divide por underscore
+        parts = filename.replace('.flac', '').split('_')
+        # Penultimo elemento e o timestamp inicial
+        timestamp_start = float(parts[-2])
+        return timestamp_start
+    except (ValueError, IndexError) as e:
+        logger.warning(f"Erro ao extrair timestamp de {filename}: {e}")
+        return 0.0
+
+
+def extract_flac_info(filename: str) -> Tuple[str, str]:
+    """
+    Extrai informacoes de arquivos FLAC do segments_aprovados
     
-    segment_number = segment_match.group(1)
+    Args:
+        filename: Nome do arquivo FLAC
+        
+    Returns:
+        Tupla (video_id, segment_number)
+    """
+    # Exemplo: EhzSC3LWez4_segment_000_SPEAKER_00_1.43_24.41.flac
+    pattern = r'^([^_]+)_segment_(\d+)_'
+    match = re.match(pattern, filename)
     
-    # Extrai modelo (wav2vec2 ou whisper)
-    if 'wav2vec2' in name:
-        modelo = 'wav2vec2'
-    elif 'whisper' in name:
-        modelo = 'whisper'
-    else:
-        return None, None, None
+    if match:
+        video_id = match.group(1)
+        segment_num = match.group(2)
+        return video_id, segment_num
     
-    return video_id, segment_number, modelo
+    return "", ""
+
+
+def group_flac_files_by_segment(files: List[Path]) -> Dict[str, List[Path]]:
+    """
+    Agrupa arquivos FLAC por segmento base e ordena por timestamp
+    
+    Args:
+        files: Lista de arquivos FLAC
+        
+    Returns:
+        Dicionario agrupado por segment base, com FLACs ordenados por timestamp
+    """
+    grouped = defaultdict(list)
+    
+    for file_path in files:
+        video_id, segment_num = extract_flac_info(file_path.name)
+        
+        if video_id and segment_num:
+            base_key = f"{video_id}_segment_{segment_num}"
+            grouped[base_key].append(file_path)
+    
+    # Ordena arquivos dentro de cada grupo por timestamp inicial
+    for key in grouped:
+        grouped[key].sort(key=lambda x: extract_flac_timestamp(x.name))
+    
+    return dict(grouped)
+
+def extract_flac_info(filename: str) -> Tuple[str, str]:
+    """
+    Extrai informacoes de arquivos FLAC do segments_aprovados
+    
+    Args:
+        filename: Nome do arquivo FLAC
+        
+    Returns:
+        Tupla (video_id, segment_number)
+    """
+    # Exemplo: EhzSC3LWez4_segment_000_SPEAKER_00_1.43_24.41.flac
+    pattern = r'^([^_]+)_segment_(\d+)_'
+    match = re.match(pattern, filename)
+    
+    if match:
+        video_id = match.group(1)
+        segment_num = match.group(2)
+        return video_id, segment_num
+    
+    return "", ""
+
+
+def group_flac_files_by_segment(files: List[Path]) -> Dict[str, List[Path]]:
+    """
+    Agrupa arquivos FLAC por segmento base (ignora timestamps)
+    
+    Args:
+        files: Lista de arquivos FLAC
+        
+    Returns:
+        Dicionario agrupado por segment base
+    """
+    grouped = defaultdict(list)
+    
+    for file_path in files:
+        video_id, segment_num = extract_flac_info(file_path.name)
+        
+        if video_id and segment_num:
+            base_key = f"{video_id}_segment_{segment_num}"
+            grouped[base_key].append(file_path)
+    
+    # Ordena arquivos dentro de cada grupo pelo nome completo
+    for key in grouped:
+        grouped[key].sort(key=lambda x: x.name)
+    
+    return dict(grouped)
+
+def group_files_by_segment(files: List[Path]) -> Dict[str, List[Path]]:
+    """
+    Agrupa arquivos por segmento base
+    
+    Args:
+        files: Lista de arquivos
+        
+    Returns:
+        Dicionário agrupado por segment base
+    """
+    grouped = defaultdict(list)
+    
+    for file_path in files:
+        video_id, segment_num, _ = extract_base_info(file_path.name)
+        
+        if video_id and segment_num:
+            base_key = f"{video_id}_segment_{segment_num}"
+            grouped[base_key].append(file_path)
+    
+    # Ordena arquivos dentro de cada grupo
+    for key in grouped:
+        grouped[key].sort(key=lambda x: x.name)
+    
+    return dict(grouped)
+def map_txt_to_flac(whisper_files: List[Path], 
+                    wav2vec2_files: List[Path],
+                    flac_files: List[Path]) -> Dict[str, Dict[str, Path]]:
+    """
+    Mapeia arquivos .txt aos .flac correspondentes
+    
+    Logica:
+    1. Agrupa TXTs por segment (tem _NNN no final)
+    2. Agrupa FLACs por segment (ordena por timestamp)
+    3. Mapeia por indice: TXT _001 -> FLAC indice 0 (menor timestamp)
+    
+    Args:
+        whisper_files: Lista de arquivos whisper
+        wav2vec2_files: Lista de arquivos wav2vec2
+        flac_files: Lista de arquivos flac
+        
+    Returns:
+        Dicionario de mapeamento com validacao de consistencia
+    """
+    # Agrupa TXTs normalmente (tem _NNN no final)
+    whisper_groups = group_files_by_segment(whisper_files)
+    wav2vec2_groups = group_files_by_segment(wav2vec2_files)
+    
+    # Agrupa FLACs e ordena por timestamp
+    flac_groups = group_flac_files_by_segment(flac_files)
+    
+    mappings = {}
+    
+    all_keys = set(whisper_groups.keys()) | set(wav2vec2_groups.keys()) | set(flac_groups.keys())
+    
+    for base_key in sorted(all_keys):
+        whisper_list = whisper_groups.get(base_key, [])
+        wav2vec2_list = wav2vec2_groups.get(base_key, [])
+        flac_list = flac_groups.get(base_key, [])
+        
+        # Validacao: verifica se quantidades batem
+        if len(whisper_list) != len(wav2vec2_list):
+            logger.warning(f"Inconsistencia em {base_key}: "
+                         f"{len(whisper_list)} whisper vs {len(wav2vec2_list)} wav2vec2")
+        
+        if len(whisper_list) != len(flac_list):
+            logger.warning(f"Inconsistencia em {base_key}: "
+                         f"{len(whisper_list)} TXTs vs {len(flac_list)} FLACs")
+        
+        # Usa o minimo para evitar index out of range
+        min_len = min(len(whisper_list), len(wav2vec2_list), len(flac_list))
+        
+        if min_len == 0:
+            logger.warning(f"Grupo vazio ignorado: {base_key}")
+            continue
+        
+        # Mapeia por indice ordenado
+        for i in range(min_len):
+            # Extrai numero do arquivo whisper (que e a fonte da verdade)
+            whisper_name = whisper_list[i].name
+            # Exemplo: EhzSC3LWez4_segment_000_stt_whisper_001.txt
+            match = re.search(r'_(\d+)\.txt$', whisper_name)
+            if match:
+                subseg_num = match.group(1)
+            else:
+                subseg_num = f"{i+1:03d}"
+            
+            key = f"{base_key}_stt_{subseg_num}"
+            
+            # Validacao: verifica se wav2vec2 tem mesmo numero
+            wav2vec2_name = wav2vec2_list[i].name
+            if f"_{subseg_num}.txt" not in wav2vec2_name:
+                logger.warning(f"Numeracao inconsistente: {whisper_name} vs {wav2vec2_name}")
+            
+            mappings[key] = {
+                "whisper": whisper_list[i],
+                "wav2vec2": wav2vec2_list[i],
+                "flac": flac_list[i]
+            }
+            
+            logger.debug(f"Mapeamento criado: {key}")
+            logger.debug(f"  Whisper: {whisper_list[i].name}")
+            logger.debug(f"  WAV2VEC2: {wav2vec2_list[i].name}")
+            logger.debug(f"  FLAC: {flac_list[i].name}")
+    
+    return mappings
 
 
 def read_text_file(filepath: Path) -> Optional[str]:
     """
-    Lê arquivo de texto com tratamento de encoding
+    Lê arquivo de texto com tratamento de erro
     
     Args:
         filepath: Caminho do arquivo
         
     Returns:
-        Conteúdo do arquivo ou None em caso de erro
+        Conteúdo do arquivo ou None
     """
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             return f.read().strip()
-    except UnicodeDecodeError:
-        # Fallback para encoding latin-1
-        try:
-            with open(filepath, 'r', encoding='latin-1') as f:
-                return f.read().strip()
-        except Exception as e:
-            logger.error(f"Erro ao ler {filepath}: {e}")
-            return None
     except Exception as e:
-        logger.error(f"Erro ao ler {filepath}: {e}")
+        logger.warning(f"Erro ao ler {filepath.name}: {e}")
         return None
 
 
-def find_stt_directories(session_dir: Path) -> Tuple[Optional[Path], Optional[Path]]:
+def process_stt_results(session_dir: str) -> Dict:
     """
-    Busca automaticamente os diretórios STT-whisper e STT-wav2vec2
+    Processa resultados STT de uma sessão
     
     Args:
         session_dir: Diretório da sessão
         
     Returns:
-        Tupla (whisper_dir, wav2vec2_dir)
+        Dicionário com resultados do processamento
     """
-    # Padrão esperado: session_dir/stt_results/stt_results/
-    stt_base = session_dir / 'stt_results' / 'stt_results'
+    session_path = Path(session_dir)
     
-    if not stt_base.exists():
-        # Tenta alternativa: session_dir/stt_results/
-        stt_base = session_dir / 'stt_results'
+    if not session_path.exists():
+        error_msg = f"Diretório da sessão não encontrado: {session_dir}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
     
-    whisper_dir = stt_base / 'STT-whisper'
-    wav2vec2_dir = stt_base / 'STT-wav2vec2'
+    logger.info(f"Processando sessão: {session_path}")
     
-    # Verifica se os diretórios existem
-    whisper_exists = whisper_dir.exists() and whisper_dir.is_dir()
-    wav2vec2_exists = wav2vec2_dir.exists() and wav2vec2_dir.is_dir()
+    # Define caminhos
+    stt_results_dir = session_path / "stt_results" / "stt_results"
+    whisper_dir = stt_results_dir / "STT-whisper"
+    wav2vec2_dir = stt_results_dir / "STT-wav2vec2"
+    segments_dir = session_path / "stt_ready"
     
-    return (whisper_dir if whisper_exists else None,
-            wav2vec2_dir if wav2vec2_exists else None)
+    # Verifica diretórios
+    if not whisper_dir.exists() or not wav2vec2_dir.exists():
+        error_msg = f"Diretórios STT não encontrados em {stt_results_dir}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    if not segments_dir.exists():
+        error_msg = f"Diretório stt_ready não encontrado: {segments_dir}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    # Coleta arquivos
+    whisper_files = list(whisper_dir.glob("*.txt"))
+    wav2vec2_files = list(wav2vec2_dir.glob("*.txt"))
+    # Busca recursiva em subpastas speaker_XX
+    flac_files = []
+    for speaker_dir in segments_dir.iterdir():
+        if speaker_dir.is_dir() and speaker_dir.name.startswith('speaker_'):
+            flac_files.extend(list(speaker_dir.glob("*.flac")))
+    
+    logger.info(f"Encontrados {len(whisper_files)} arquivos Whisper")
+    logger.info(f"Encontrados {len(wav2vec2_files)} arquivos WAV2VEC2")
+    logger.info(f"Encontrados {len(flac_files)} arquivos FLAC")
+    
+    if not whisper_files and not wav2vec2_files:
+        error_msg = "Nenhum arquivo .txt STT encontrado"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    # Mapeia arquivos
+    mappings = map_txt_to_flac(whisper_files, wav2vec2_files, flac_files)
+    
+    if not mappings:
+        error_msg = "Nenhum mapeamento válido criado"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    logger.info(f"Criados {len(mappings)} mapeamentos")
+    
+    # Processa cada mapeamento
+    normalized_pairs = {}
+    
+    for key, files in mappings.items():
+        whisper_path = files["whisper"]
+        wav2vec2_path = files["wav2vec2"]
+        flac_path = files["flac"]
+        
+        pair_data = {
+            "txt_whisper": whisper_path.name if whisper_path else None,
+            "txt_wav2vec2": wav2vec2_path.name if wav2vec2_path else None,
+            "flac_file": flac_path.name if flac_path else None,
+            "whisper_original": "",
+            "whisper_normalized": "",
+            "wav2vec2_original": "",
+            "wav2vec2_normalized": ""
+        }
+        
+        # Lê e normaliza whisper
+        if whisper_path and whisper_path.exists():
+            whisper_text = read_text_file(whisper_path)
+            if whisper_text:
+                pair_data["whisper_original"] = whisper_text
+                pair_data["whisper_normalized"] = normalize_text(whisper_text)
+        
+        # Lê e normaliza wav2vec2
+        if wav2vec2_path and wav2vec2_path.exists():
+            wav2vec2_text = read_text_file(wav2vec2_path)
+            if wav2vec2_text:
+                pair_data["wav2vec2_original"] = wav2vec2_text
+                pair_data["wav2vec2_normalized"] = normalize_text(wav2vec2_text)
+        
+        normalized_pairs[key] = pair_data
+    
+    # Extrai video_id
+    video_id = list(mappings.keys())[0].split('_')[0] if mappings else "unknown"
+    
+    # Cria JSON de saída
+    output_data = {
+        "video_id": video_id,
+        "session_dir": str(session_path),
+        "total_segments": len(normalized_pairs),
+        "normalized_pairs": normalized_pairs
+    }
+    
+    # Salva JSON
+# Salva JSON dentro de stt_results/validation_results
+    validation_results_dir = stt_results_dir / "validation_results"
+    validation_results_dir.mkdir(parents=True, exist_ok=True)
+    output_file = validation_results_dir / f"{video_id}_normalized_text.json"
+    
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Salvo texto normalizado em: {output_file}")
+        
+        return {
+            "success": True,
+            "output_file": str(output_file),
+            "output_files": [str(output_file)],
+            "total_segments": len(normalized_pairs),
+            "total_videos": 1,
+            "video_id": video_id
+        }
+        
+    except Exception as e:
+        error_msg = f"Erro ao salvar JSON: {e}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
 
 
-def find_all_sessions(base_dir: str = "audios_baixados/output") -> List[Path]:
+def find_all_sessions(base_dir: str = "../../audios_baixados/output") -> List[Path]:
     """
-    Busca todas as sessões disponíveis automaticamente
+    Encontra todas as sessões no diretório base
     
     Args:
-        base_dir: Diretório base onde estão as sessões
+        base_dir: Diretório base
         
     Returns:
-        Lista de caminhos das sessões encontradas
+        Lista de diretórios de sessão
     """
     base_path = Path(base_dir)
     
     if not base_path.exists():
-        logger.warning(f"Diretório base não encontrado: {base_path}")
+        logger.warning(f"Diretório base não encontrado: {base_dir}")
         return []
     
-    # Busca todas as pastas que contenham stt_results
     sessions = []
-    
     for item in base_path.iterdir():
         if item.is_dir():
-            # Verifica se tem stt_results dentro
-            stt_path = item / 'stt_results'
-            if stt_path.exists():
+            stt_dir = item / "stt_results"
+            if stt_dir.exists():
                 sessions.append(item)
-                logger.debug(f"Sessão encontrada: {item.name}")
     
-    return sessions
+    return sorted(sessions)
 
 
-def process_all_sessions(base_dir: str = "audios_baixados/output") -> Dict:
+def process_all_sessions(base_dir: str = "../../audios_baixados/output") -> Dict:
     """
-    Processa todas as sessões encontradas automaticamente
+    Processa todas as sessões no diretório base
     
     Args:
-        base_dir: Diretório base onde estão as sessões
+        base_dir: Diretório base
         
     Returns:
-        Dicionário com resultados do processamento de todas as sessões
+        Dicionário com resultados de todas as sessões
     """
     logger.info("Buscando sessões automaticamente...")
-    
     sessions = find_all_sessions(base_dir)
     
     if not sessions:
@@ -492,9 +728,9 @@ def process_all_sessions(base_dir: str = "audios_baixados/output") -> Dict:
             results["processed_sessions"].append({
                 "session_name": session_path.name,
                 "session_path": str(session_path),
-                "output_files": result["output_files"],
-                "total_videos": result["total_videos"],
-                "total_segments": result["total_segments"]
+                "output_file": result["output_file"],
+                "total_segments": result["total_segments"],
+                "video_id": result["video_id"]
             })
         else:
             results["failed_sessions"].append({
@@ -503,7 +739,7 @@ def process_all_sessions(base_dir: str = "audios_baixados/output") -> Dict:
                 "error": result.get("error")
             })
     
-    # Resumo final
+    # Resumo
     logger.info(f"\n{'='*60}")
     logger.info("RESUMO DO PROCESSAMENTO")
     logger.info(f"{'='*60}")
@@ -514,175 +750,36 @@ def process_all_sessions(base_dir: str = "audios_baixados/output") -> Dict:
     return results
 
 
-def process_stt_results(session_dir: str) -> Dict:
-    """
-    Processa resultados STT de uma sessão automaticamente
-    Busca arquivos .txt nos diretórios STT-whisper e STT-wav2vec2
-    
-    Args:
-        session_dir: Diretório da sessão (ex: "audios_baixados/output/teste_com_token")
-        
-    Returns:
-        Dicionário com resultado do processamento
-    """
-    session_path = Path(session_dir)
-    
-    if not session_path.exists():
-        error_msg = f"Diretório da sessão não encontrado: {session_path}"
-        logger.error(error_msg)
-        return {"success": False, "error": error_msg}
-    
-    logger.info(f"Processando sessão: {session_path}")
-    
-    # Busca diretórios STT automaticamente
-    whisper_dir, wav2vec2_dir = find_stt_directories(session_path)
-    
-    if not whisper_dir and not wav2vec2_dir:
-        error_msg = "Nenhum diretório STT encontrado"
-        logger.error(error_msg)
-        return {"success": False, "error": error_msg}
-    
-    # Coleta todos os arquivos .txt
-    txt_files = []
-    
-    if whisper_dir:
-        whisper_files = list(whisper_dir.glob("*.txt"))
-        txt_files.extend(whisper_files)
-        logger.info(f"Encontrados {len(whisper_files)} arquivos Whisper")
-    
-    if wav2vec2_dir:
-        wav2vec2_files = list(wav2vec2_dir.glob("*.txt"))
-        txt_files.extend(wav2vec2_files)
-        logger.info(f"Encontrados {len(wav2vec2_files)} arquivos WAV2VEC2")
-    
-    if not txt_files:
-        error_msg = "Nenhum arquivo .txt encontrado"
-        logger.error(error_msg)
-        return {"success": False, "error": error_msg}
-    
-    logger.info(f"Total de arquivos .txt: {len(txt_files)}")
-    
-    # Agrupa arquivos por video_id e segment
-    grouped_files = {}
-    
-    for txt_file in txt_files:
-        video_id, segment_number, modelo = extract_file_info(txt_file.name)
-        
-        if not all([video_id, segment_number, modelo]):
-            logger.warning(f"Erro ao extrair informações de: {txt_file.name}")
-            continue
-        
-        # Chave única para agrupar
-        key = f"{video_id}_{segment_number}"
-        
-        if key not in grouped_files:
-            grouped_files[key] = {'video_id': video_id, 'segment': segment_number}
-        
-        # Lê conteúdo do arquivo
-        content = read_text_file(txt_file)
-        if content:
-            grouped_files[key][f"{modelo}_file"] = txt_file.name
-            grouped_files[key][f"{modelo}_original"] = content
-            grouped_files[key][f"{modelo}_normalized"] = normalize_text(content)
-    
-    if not grouped_files:
-        error_msg = "Nenhum arquivo válido processado"
-        logger.error(error_msg)
-        return {"success": False, "error": error_msg}
-    
-    # Agrupa por video_id para criar JSONs separados
-    videos = {}
-    for key, data in grouped_files.items():
-        video_id = data['video_id']
-        if video_id not in videos:
-            videos[video_id] = {}
-        videos[video_id][key] = data
-    
-    # Cria JSON para cada video_id
-    output_files = []
-    
-    for video_id, segments in videos.items():
-        normalized_pairs = {}
-        valid_pairs = 0
-        
-        # Ordena segmentos por número (0000, 0001, 0002, etc.)
-        sorted_segments = sorted(segments.items(), key=lambda x: x[0])
-        
-        for segment_key, data in sorted_segments:
-            normalized_pairs[segment_key] = {
-                'wav2vec2_original': data.get('wav2vec2_original'),
-                'wav2vec2_normalized': data.get('wav2vec2_normalized'),
-                'whisper_original': data.get('whisper_original'), 
-                'whisper_normalized': data.get('whisper_normalized'),
-                'segment_filename': f"{segment_key}.wav"
-            }
-            
-            # Conta pares válidos (com ambos os modelos normalizados)
-            if (data.get('wav2vec2_normalized') and data.get('whisper_normalized')):
-                valid_pairs += 1
-        
-        # Cria estrutura final
-        result = {
-            "metadata": {
-                "processing_date": datetime.now().isoformat(),
-                "wav2vec2_source": "arquivos *wav2vec2.txt",
-                "whisper_source": "arquivos *whisper.txt", 
-                "total_pairs": len(normalized_pairs),
-                "valid_pairs": valid_pairs,
-                "video_id": video_id
-            },
-            "normalized_pairs": normalized_pairs
-        }
-        
-        # Salva JSON no diretório stt_results
-        output_dir = session_path / 'stt_results'
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / f"{video_id}_normalized_text.json"
-        
-        try:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
-            
-            logger.info(f"Arquivo salvo: {output_file}")
-            logger.info(f"Video ID: {video_id}")
-            logger.info(f"Total de segmentos: {len(normalized_pairs)}")
-            logger.info(f"Pares válidos: {valid_pairs}")
-            logger.info("-" * 50)
-            
-            output_files.append(str(output_file))
-            
-        except Exception as e:
-            logger.error(f"Erro ao salvar {output_file}: {e}")
-            return {"success": False, "error": str(e)}
-    
-    return {
-        "success": True,
-        "output_files": output_files,
-        "total_videos": len(videos),
-        "total_segments": len(grouped_files)
-    }
-
-
 def main():
-    """
-    Função principal para uso standalone
-    """
-    import argparse
+    """Ponto de entrada principal"""
+    parser = argparse.ArgumentParser(
+        description='Normaliza textos STT para validação'
+    )
     
-    parser = argparse.ArgumentParser(description='Normalizador de Texto para STT')
-    parser.add_argument('session_dir', type=str, nargs='?', default=None,
-                       help='Diretório da sessão específica (opcional). Se não fornecido, processa todas as sessões.')
-    parser.add_argument('--base-dir', type=str, default='audios_baixados/output',
-                       help='Diretório base onde estão as sessões (padrão: audios_baixados/output)')
-    parser.add_argument('--all', action='store_true',
-                       help='Processar todas as sessões automaticamente')
+    parser.add_argument(
+        'session_dir',
+        nargs='?',
+        help='Caminho do diretório da sessão (opcional com --all)'
+    )
+    
+    parser.add_argument(
+        '--base-dir',
+        default='../../audios_baixados/output',
+        help='Diretório base para descoberta automática de sessões'
+    )
+    
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Processa todas as sessões no diretório base'
+    )
     
     args = parser.parse_args()
     
-    logger.info("NORMALIZADOR DE TEXTO PARA SIMILARIDADE")
-    logger.info("=" * 50)
+    logger.info("NORMALIZADOR DE TEXTO PARA VALIDACAO STT")
+    logger.info("="*50)
     
-    # Se --all ou nenhum session_dir fornecido, processa todas as sessões
+    # Processa todas as sessões ou sessão específica
     if args.all or args.session_dir is None:
         logger.info("Modo: Processamento automático de todas as sessões")
         result = process_all_sessions(args.base_dir)
@@ -695,16 +792,15 @@ def main():
         else:
             logger.error(f"Erro: {result.get('error')}")
     
-    # Caso contrário, processa sessão específica
     else:
         logger.info(f"Modo: Processamento de sessão específica")
         result = process_stt_results(args.session_dir)
         
         if result["success"]:
             logger.info("Processamento concluído com sucesso!")
-            logger.info(f"Arquivos gerados: {len(result['output_files'])}")
+            logger.info(f"Arquivo de saída: {result['output_file']}")
         else:
-            logger.error(f"Erro durante o processamento: {result.get('error')}")
+            logger.error(f"Erro durante processamento: {result.get('error')}")
 
 
 if __name__ == "__main__":

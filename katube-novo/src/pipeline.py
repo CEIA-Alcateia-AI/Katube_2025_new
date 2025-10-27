@@ -1150,20 +1150,24 @@ class AudioProcessingPipeline:
         return base_name
     
     def _prepare_for_json(self, obj):
-        """Recursively convert Path objects and Annotation objects to strings for JSON serialization."""
-        from pyannote.core import Annotation
-        
-        if isinstance(obj, Path):
-            return str(obj)
-        elif isinstance(obj, Annotation):
-            # Convert Annotation to string representation or skip it
-            return str(obj)
-        elif isinstance(obj, dict):
-            return {k: self._prepare_for_json(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [self._prepare_for_json(item) for item in obj]
-        else:
-            return obj
+            """Recursively convert Path objects and Annotation objects to strings for JSON serialization."""
+            from pyannote.core import Annotation
+            import pandas as pd
+            
+            if isinstance(obj, Path):
+                return str(obj)
+            elif isinstance(obj, Annotation):
+                # Convert Annotation to string representation or skip it
+                return str(obj)
+            elif isinstance(obj, pd.DataFrame):
+                # Converte DataFrame para lista de dicionarios
+                return obj.to_dict(orient='records')
+            elif isinstance(obj, dict):
+                return {k: self._prepare_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [self._prepare_for_json(item) for item in obj]
+            else:
+                return obj
     
     def create_final_dataset(self, denoised_audio_paths: List[Path], stt_results_dir: Path, output_dir: Path) -> Dict[str, Any]:
         """
