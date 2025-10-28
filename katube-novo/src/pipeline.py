@@ -19,7 +19,6 @@ from stt_whisper import WhisperSTTTranscriber
 from stt_wav2vec2 import WAV2VEC2STTTranscriber
 from audio_normalizer import AudioNormalizer
 from src.marcos_validation.text_normalizer import process_stt_results as normalize_stt_texts
-from marcos_validation.validador_transcricao import create_validation_file as marcos_create_validation_file
 from denoiser import Denoiser
 from sox_normalizer import SoxNormalizer
 from mos_filter import MOSQualityFilter
@@ -211,8 +210,18 @@ class AudioProcessingPipeline:
             }
         
         # Apply MOS filter with 3-tier classification
-        approved_segments, intermediate_segments, rejected_segments = self.mos_filter.filter_audio_segments(segment_paths, output_dir=self.session_dir)
-        
+        # COLE AQUI - Mudança 3
+        # Extrair video_id do primeiro segmento
+        video_id = None
+        if segment_paths:
+            first_segment = segment_paths[0].stem
+            video_id = first_segment.split('_segment_')[0] if '_segment_' in first_segment else None
+
+        approved_segments, intermediate_segments, rejected_segments = self.mos_filter.filter_audio_segments(
+            segment_paths, 
+            output_dir=self.session_dir,
+            video_id=video_id
+        )
         # For pipeline continuation, use approved segments (≥3.0)
         accepted_segments = approved_segments
         
@@ -261,8 +270,17 @@ class AudioProcessingPipeline:
         rejected_mos_dir.mkdir(exist_ok=True)
         
         # Apply MOS filter with 3-tier classification
-        approved_segments, intermediate_segments, rejected_segments = self.mos_filter.filter_audio_segments(segment_paths, output_dir=self.session_dir)
-        
+        # Extrair video_id do primeiro segmento
+        video_id = None
+        if segment_paths:
+            first_segment = segment_paths[0].stem
+            video_id = first_segment.split('_segment_')[0] if '_segment_' in first_segment else None
+
+        approved_segments, intermediate_segments, rejected_segments = self.mos_filter.filter_audio_segments(
+            segment_paths,
+            output_dir=self.session_dir,
+            video_id=video_id
+        )
         # For pipeline continuation, use approved segments (≥3.0)
         accepted_segments = approved_segments
         
@@ -507,7 +525,8 @@ class AudioProcessingPipeline:
             }
             
             logger.info(f"Transcription completed: {combined_results['whisper_count']} Whisper, {combined_results['wav2vec2_count']} WAV2VEC2")
-                 # Step 7.5: Normalize STT texts for validation
+            
+            # Step 7.5: Normalize STT texts for validation
             logger.info("=== STEP 7.5: NORMALIZING STT TEXTS ===")
             try:
                 normalization_result = normalize_stt_texts(str(self.session_dir))
@@ -527,26 +546,62 @@ class AudioProcessingPipeline:
                 logger.error(f"Error in text normalization: {e}")
                 combined_results['normalization'] = {"error": str(e)}
 
-            # Step 8: Validate STT transcriptions
-            if whisper_results and wav2vec2_results:
-                validation_result = self.validate_stt_transcriptions(
-                    whisper_results=whisper_results.get("whisper_results", []),
-                    wav2vec2_results=wav2vec2_results.get("wav2vec2_results", []),
-                    output_dir=stt_output_dir
-                )
-                combined_results['validation'] = validation_result
-                logger.info(f"✅ STT validation completed: {validation_result.get('average_similarity', 0):.3f} avg similarity")
-                
-                # Step 9: Filter by similarity threshold and apply denoising
-                if validation_result.get('success') and validation_result.get('validation_results'):
-                    filter_result = self.filter_and_denoise_segments(
-                        validation_results=validation_result['validation_results'],
-                        output_dir=self.session_dir,  # Use session_dir instead of stt_output_dir
-                        similarity_threshold=0.80
-                    )
-                    combined_results['filter_and_denoise'] = filter_result
-                    logger.info(f"✅ Filtering and denoising completed: {filter_result.get('validated_count', 0)} validated, {filter_result.get('denoised_count', 0)} denoised")
+            # Step 8: Validate STT transcriptions with Levenshtein + MOS
+            logger.info("=== STEP 8: VALIDATING STT TRANSCRIPTIONS ===")
+            if normalization_result.get('success'):
+                try:
+                    # Importar funcao de validacao
+                    from src.marcos_validation.validador_transcricao import validate_normalized_texts
+                    
+                    # Buscar arquivo JSON normalizado
+                    normalized_json_path = normalization_result.get('output_file')
+                    
+                    if normalized_json_path:
+                        # Executar validacao (Levenshtein + MOS)
+                        validation_result = validate_normalized_texts(normalized_json_path)
+                        
+                        if validation_result.get('success'):
+                            combined_results['validation'] = validation_result
+                            logger.info(f"STT validation completed:")
+                            logger.info(f"   - Average similarity: {validation_result.get('average_similarity', 0):.3f}")
+                            logger.info(f"   - MOS scores found: {validation_result.get('mos_scores_found', 0)}/{validation_result.get('validated_segments', 0)}")
+                            logger.info(f"   - Output file: {validation_result.get('output_file')}")
+                        else:
+                            logger.warning(f"Text validation failed: {validation_result.get('error')}")
+                            combined_results['validation'] = {"error": validation_result.get('error')}
+                    else:
+                        logger.warning("Normalization output file not found, skipping validation")
+                        combined_results['validation'] = {"error": "No normalized file to validate"}
+                        
+                except Exception as e:
+                    logger.error(f"Error in text validation: {e}")
+                    combined_results['validation'] = {"error": str(e)}
+            else:
+                logger.warning("Skipping validation - normalization failed")
+                combined_results['validation'] = {"error": "Normalization failed"}
             
+            # Step 9: Filter by similarity threshold and MOS, then apply denoising
+            if combined_results.get('validation', {}).get('success'):
+                try:
+                    validation_json_path = combined_results['validation'].get('output_file')
+                    
+                    if validation_json_path:
+                        filter_result = self.filter_and_denoise_segments(
+                            validation_json_path=validation_json_path,
+                            output_dir=self.session_dir,
+                            similarity_threshold=0.80,
+                            mos_range=(2.5, 3.0)
+                        )
+                        combined_results['filter_and_denoise'] = filter_result
+                        logger.info(f"Filtering and denoising completed:")
+                        logger.info(f"   - Validated count: {filter_result.get('validated_count', 0)}")
+                        logger.info(f"   - Denoised count: {filter_result.get('denoised_count', 0)}")
+                    else:
+                        logger.warning("Validation output file not found, skipping filter and denoise")
+                        
+                except Exception as e:
+                    logger.error(f"Error in filter and denoise: {e}")
+                    combined_results['filter_and_denoise'] = {"error": str(e)}
             return combined_results
             
         except Exception as e:
@@ -926,209 +981,203 @@ class AudioProcessingPipeline:
             return {"error": str(e)}
     
     def filter_and_denoise_segments(self, 
-                                   validation_results: List[Dict], 
+                                   validation_json_path: str,
                                    output_dir: Path,
-                                   similarity_threshold: float = 0.80) -> Dict[str, Any]:
+                                   similarity_threshold: float = 0.80,
+                                   mos_range: Tuple[float, float] = (2.5, 3.0)) -> Dict[str, Any]:
         """
-        Step 9: Filter segments by similarity threshold and apply denoising.
+        Step 9: Filter segments by similarity threshold AND MOS range, then apply denoising.
         
         Args:
-            validation_results: List of validation results with similarity scores
+            validation_json_path: Path to validation JSON file
             output_dir: Directory to save processed segments
             similarity_threshold: Minimum similarity score to accept (default 0.80)
+            mos_range: MOS range tuple (min, max) for denoising (default (2.5, 3.0))
             
         Returns:
             Dictionary with filtering and denoising results
         """
-        logger.info(f"=== STEP 9: FILTERING AND DENOISING SEGMENTS (threshold: {similarity_threshold}) ===")
-        
-        # Temporarily set debug level to see what's happening
-        import logging
-        original_level = logger.level
-        logger.setLevel(logging.DEBUG)
-        
-        if not validation_results:
-            logger.warning("⚠️ No validation results to process")
-            return {"error": "No validation results to process"}
+        logger.info(f"=== STEP 9: FILTERING AND DENOISING SEGMENTS ===")
+        logger.info(f"Similarity threshold: {similarity_threshold}")
+        logger.info(f"MOS range for denoising: {mos_range[0]} - {mos_range[1]}")
         
         try:
-            # Create output directories following the desired structure
+            # Carregar JSON de validacao
+            import json
+            from pathlib import Path as PathLib
+            
+            validation_path = PathLib(validation_json_path)
+            
+            if not validation_path.exists():
+                error_msg = f"Validation JSON not found: {validation_json_path}"
+                logger.error(error_msg)
+                return {"success": False, "error": error_msg}
+            
+            with open(validation_path, 'r', encoding='utf-8') as f:
+                validation_data = json.load(f)
+            
+            video_id = validation_data.get('video_id', 'unknown')
+            normalized_pairs = validation_data.get('normalized_pairs', {})
+            
+            if not normalized_pairs:
+                error_msg = "No normalized pairs found in validation JSON"
+                logger.error(error_msg)
+                return {"success": False, "error": error_msg}
+            
+            logger.info(f"Loaded validation data: {len(normalized_pairs)} segments")
+            
+            # Create output directories
             validated_dir = output_dir / 'audios_validados_tts'
             denoised_dir = output_dir / 'audios_denoiser'
-            rejected_dir = output_dir / 'audio_rejeitado_validacao'
+            rejected_similarity_dir = output_dir / 'audio_rejeitado_validacao'
+            rejected_mos_dir = output_dir / 'audio_rejeitado_mos_range'
             
             validated_dir.mkdir(parents=True, exist_ok=True)
             denoised_dir.mkdir(parents=True, exist_ok=True)
-            rejected_dir.mkdir(parents=True, exist_ok=True)
+            rejected_similarity_dir.mkdir(parents=True, exist_ok=True)
+            rejected_mos_dir.mkdir(parents=True, exist_ok=True)
             
-            # Filter segments by similarity threshold
-            validated_segments = []
-            rejected_segments = []
+            # Listas para categorizar segmentos
+            approved_for_denoise = []
+            rejected_by_similarity = []
+            rejected_by_mos = []
+            approved_no_denoise = []
             
-            for result in validation_results:
-                filename = result['filename']
-                similarity = result['similarity']
+            # Processar cada segmento
+            for segment_id, pair_data in normalized_pairs.items():
+                similarity = pair_data.get('levenshtein_similarity', 0.0)
+                mos_score = pair_data.get('mos_score')
+                flac_file = pair_data.get('flac_file')
                 
-                # Extract base name from validation filename to match with actual audio files
-                # Example: segment_000_stt_001 -> segment_000
-                base_name = self._extract_base_name_for_validation(filename)
-                
-                # Search for the actual audio file in stt_ready subdirectories
-                audio_file = None
-                possible_locations = [
-                    # Search in stt_ready subdirectories (speaker_SPEAKER_00, speaker_SPEAKER_01, etc.)
-                    output_dir / 'stt_ready' / 'speaker_SPEAKER_00',
-                    output_dir / 'stt_ready' / 'speaker_SPEAKER_01',
-                    output_dir / 'stt_ready' / 'speaker_SPEAKER_02',
-                    output_dir / 'stt_ready' / 'speaker_SPEAKER_03',
-                    # Search in actual speaker directories created by prepare_for_stt
-                    output_dir / 'stt_ready' / 'speaker_00',
-                    output_dir / 'stt_ready' / 'speaker_01',
-                    output_dir / 'stt_ready' / 'speaker_02',
-                    output_dir / 'stt_ready' / 'speaker_03',
-                    # Fallback locations
-                    output_dir / 'stt_ready',
-                    output_dir / 'speakers',
-                    output_dir / 'segments_aprovados',
-                    output_dir / 'segments'
-                ]
-                
-                # Search in each possible location
-                for location in possible_locations:
-                    if location.exists():
-                        logger.info(f"🔍 Searching in: {location}")
-                        files_found = list(location.glob("*.flac"))
-                        logger.info(f"📁 Found {len(files_found)} FLAC files in {location}")
-                        
-                        # Log first few files for debugging
-                        for i, audio_path in enumerate(files_found[:3]):
-                            logger.info(f"   File {i+1}: {audio_path.name}")
-                        
-                        # Search for files in this specific location
-                        for audio_path in files_found:
-                            logger.debug(f"  Comparing base '{base_name}' with file stem '{audio_path.stem}'")
-                            # Check if the base name matches
-                            if base_name in audio_path.stem:
-                                audio_file = audio_path
-                                logger.info(f"✅ Found audio file: {audio_file} (base: {base_name})")
-                                break
-                        if audio_file:
-                            break
-                    else:
-                        logger.debug(f"❌ Location does not exist: {location}")
-                
-                if not audio_file:
-                    logger.warning(f"⚠️ Could not find audio file for: {filename}")
+                if not flac_file:
+                    logger.warning(f"No FLAC file for segment: {segment_id}")
                     continue
                 
-                # Categorize based on similarity threshold
-                if similarity >= similarity_threshold:
-                    validated_segments.append({
-                        'filename': filename,
+                # Buscar arquivo FLAC em stt_ready
+                audio_file = None
+                stt_ready_dir = output_dir / 'stt_ready'
+                
+                if stt_ready_dir.exists():
+                    # Buscar recursivamente em subpastas speaker_XX
+                    for speaker_dir in stt_ready_dir.iterdir():
+                        if speaker_dir.is_dir():
+                            for flac_path in speaker_dir.glob("*.flac"):
+                                if flac_file in flac_path.name or segment_id.split('_stt_')[0] in flac_path.stem:
+                                    audio_file = flac_path
+                                    break
+                        if audio_file:
+                            break
+                
+                if not audio_file or not audio_file.exists():
+                    logger.warning(f"Audio file not found for: {segment_id}")
+                    continue
+                
+                # Aplicar filtros
+                if similarity < similarity_threshold:
+                    # Rejeitado por similaridade
+                    rejected_by_similarity.append({
+                        'segment_id': segment_id,
                         'similarity': similarity,
-                        'original_path': audio_file,
-                        'validated_path': validated_dir / f"{filename}.flac",
-                        'denoised_path': denoised_dir / f"{filename}_denoised.flac"
+                        'mos_score': mos_score,
+                        'audio_file': audio_file
                     })
-                    logger.info(f"✅ Validated: {filename} (similarity: {similarity:.3f})")
+                    logger.info(f"Rejected by similarity: {segment_id} (similarity={similarity:.3f})")
+                    
+                    # Copiar para pasta de rejeitados
+                    import shutil
+                    rejected_path = rejected_similarity_dir / f"{segment_id}.flac"
+                    shutil.copy2(audio_file, rejected_path)
+                    
+                elif mos_score is None:
+                    logger.warning(f"No MOS score for: {segment_id}, skipping")
+                    
+                elif mos_range[0] <= mos_score <= mos_range[1]:
+                    # Aprovado para denoising (similarity >= 0.80 E MOS em [2.5, 3.0])
+                    approved_for_denoise.append({
+                        'segment_id': segment_id,
+                        'similarity': similarity,
+                        'mos_score': mos_score,
+                        'audio_file': audio_file,
+                        'validated_path': validated_dir / f"{segment_id}.flac",
+                        'denoised_path': denoised_dir / f"{segment_id}_denoised.flac"
+                    })
+                    logger.info(f"Approved for denoise: {segment_id} (similarity={similarity:.3f}, mos={mos_score})")
+                    
+                elif mos_score >= 3.0:
+                    # Aprovado mas MOS alto - nao precisa denoising
+                    approved_no_denoise.append({
+                        'segment_id': segment_id,
+                        'similarity': similarity,
+                        'mos_score': mos_score,
+                        'audio_file': audio_file
+                    })
+                    logger.info(f"Approved (no denoise needed): {segment_id} (similarity={similarity:.3f}, mos={mos_score})")
+                    
                 else:
-                    rejected_segments.append({
-                        'filename': filename,
+                    # Rejeitado por MOS fora do range
+                    rejected_by_mos.append({
+                        'segment_id': segment_id,
                         'similarity': similarity,
-                        'original_path': audio_file,
-                        'rejected_path': rejected_dir / f"{filename}.flac"
+                        'mos_score': mos_score,
+                        'audio_file': audio_file
                     })
-                    logger.info(f"❌ Rejected: {filename} (similarity: {similarity:.3f})")
+                    logger.info(f"Rejected by MOS: {segment_id} (mos={mos_score})")
+                    
+                    # Copiar para pasta de rejeitados por MOS
+                    import shutil
+                    rejected_path = rejected_mos_dir / f"{segment_id}.flac"
+                    shutil.copy2(audio_file, rejected_path)
             
-            logger.info(f"📊 Filtering results:")
-            logger.info(f"   - Total segments: {len(validation_results)}")
-            logger.info(f"   - Validated segments (≥{similarity_threshold}): {len(validated_segments)}")
-            logger.info(f"   - Rejected segments (<{similarity_threshold}): {len(rejected_segments)}")
+            # Estatisticas
+            logger.info(f"Filtering results:")
+            logger.info(f"   - Approved for denoising: {len(approved_for_denoise)}")
+            logger.info(f"   - Approved (no denoise): {len(approved_no_denoise)}")
+            logger.info(f"   - Rejected by similarity: {len(rejected_by_similarity)}")
+            logger.info(f"   - Rejected by MOS: {len(rejected_by_mos)}")
             
-            # Log details of validated segments
-            if validated_segments:
-                logger.info("📋 Validated segments details:")
-                for seg in validated_segments[:5]:  # Show first 5
-                    logger.info(f"   - {seg['filename']}: {seg['similarity']:.3f}")
-                if len(validated_segments) > 5:
-                    logger.info(f"   ... and {len(validated_segments) - 5} more")
+            # Copiar aprovados para validated_dir
+            import shutil
+            for seg in approved_for_denoise:
+                shutil.copy2(seg['audio_file'], seg['validated_path'])
+                logger.debug(f"Copied to validated: {seg['segment_id']}")
             
-            # Log details of rejected segments  
-            if rejected_segments:
-                logger.info("📋 Rejected segments details:")
-                for seg in rejected_segments[:5]:  # Show first 5
-                    logger.info(f"   - {seg['filename']}: {seg['similarity']:.3f}")
-                if len(rejected_segments) > 5:
-                    logger.info(f"   ... and {len(rejected_segments) - 5} more")
-            
-            # Copy validated segments to audios_validados_tts directory
-            logger.info(f"📁 Copying {len(validated_segments)} validated segments to audios_validados_tts...")
-            for seg in validated_segments:
-                import shutil
-                shutil.copy2(seg['original_path'], seg['validated_path'])
-                logger.debug(f"✅ Copied to validated: {seg['filename']}")
-            
-            # Copy rejected segments to audio_rejeitado_validacao directory
-            logger.info(f"📁 Copying {len(rejected_segments)} rejected segments to audio_rejeitado_validacao...")
-            for seg in rejected_segments:
-                import shutil
-                shutil.copy2(seg['original_path'], seg['rejected_path'])
-                logger.debug(f"❌ Copied to rejected: {seg['filename']}")
-            
-            # Apply denoising to validated segments and save to audios_denoiser
-            logger.info(f"🔊 Applying DeepFilterNet3 denoising to {len(validated_segments)} validated segments...")
+            # Aplicar denoising
+            logger.info(f"Applying DeepFilterNet3 denoising to {len(approved_for_denoise)} segments...")
             denoised_count = 0
             
-            for seg in validated_segments:
+            for seg in approved_for_denoise:
                 try:
-                    logger.info(f"🎛️ Denoising: {seg['filename']} (similarity: {seg['similarity']:.3f})")
+                    logger.info(f"Denoising: {seg['segment_id']} (similarity={seg['similarity']:.3f}, mos={seg['mos_score']})")
                     self.denoiser.process_file(
                         str(seg['validated_path']), 
                         str(seg['denoised_path'])
                     )
                     denoised_count += 1
-                    logger.info(f"✅ Denoised and saved to audios_denoiser: {seg['filename']}")
+                    logger.info(f"Denoised and saved: {seg['segment_id']}")
                 except Exception as e:
-                    logger.error(f"❌ Error denoising {seg['filename']}: {e}")
+                    logger.error(f"Error denoising {seg['segment_id']}: {e}")
             
-            logger.info(f"✅ Denoising completed: {denoised_count}/{len(validated_segments)} segments processed")
+            logger.info(f"Denoising completed: {denoised_count}/{len(approved_for_denoise)} segments processed")
             
-            # Restore original log level
-            logger.setLevel(original_level)
-            
-            # Collect denoised audio paths for final dataset creation
-            denoised_audio_paths = []
-            logger.info(f"🔍 Coletando caminhos de áudios denoised de {len(validated_segments)} segmentos validados...")
-            for seg in validated_segments:
-                denoised_path = seg['denoised_path']
-                logger.debug(f"   Verificando: {denoised_path}")
-                if denoised_path.exists():
-                    denoised_audio_paths.append(denoised_path)
-                    logger.info(f"   ✅ Encontrado: {denoised_path.name}")
-                else:
-                    logger.warning(f"   ❌ Não encontrado: {denoised_path}")
-            
-            logger.info(f"📊 Total de áudios denoised coletados: {len(denoised_audio_paths)}")
-
             return {
                 'success': True,
-                'total_segments': len(validation_results),
-                'validated_count': len(validated_segments),
-                'rejected_count': len(rejected_segments),
+                'total_segments': len(normalized_pairs),
+                'approved_for_denoise': len(approved_for_denoise),
+                'approved_no_denoise': len(approved_no_denoise),
+                'rejected_by_similarity': len(rejected_by_similarity),
+                'rejected_by_mos': len(rejected_by_mos),
                 'denoised_count': denoised_count,
+                'validated_count': len(approved_for_denoise),
                 'similarity_threshold': similarity_threshold,
+                'mos_range': mos_range,
                 'validated_dir': str(validated_dir),
-                'denoised_dir': str(denoised_dir),
-                'rejected_dir': str(rejected_dir),
-                'validated_segments': validated_segments,
-                'rejected_segments': rejected_segments,
-                'denoised_audio_paths': denoised_audio_paths
+                'denoised_dir': str(denoised_dir)
             }
             
         except Exception as e:
             logger.error(f"Error in filtering and denoising: {e}")
-            return {"error": str(e)}
-    
+            return {"success": False, "error": str(e)}
+
     def _extract_base_name_for_validation(self, filename: str) -> str:
         """
         Extract base name from validation filename for matching with actual audio files.

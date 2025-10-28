@@ -1,422 +1,295 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
-# (C) 2021 Frederico Oliveira fred.santos.oliveira(at)gmail.com
-#
-#
-import argparse
-from os import makedirs
-from os.path import join, exists, dirname
-from textdistance import levenshtein
-from tqdm import tqdm
-
-
-def remove_punctuations(sentence):
-    """
-    Removes punctuations and unwanted characters from a sentence.
-    """
-    punctuations = '''—!()-[]{};:'"\\,<>./?@#$%^&*_~'''
-    sentence_with_no_punct = ""
-    for char in sentence:
-       if char not in punctuations:
-           sentence_with_no_punct = sentence_with_no_punct + char
-    return sentence_with_no_punct.strip()
-
-
-def clear_sentences(sentence):
-    """
-    Converts the sentence to lowercase and removes unwanted characters.
-    """
-    sentence = sentence.lower()
-    clean_sentence = remove_punctuations(sentence)
-    return clean_sentence
-
-
-def create_validation_file(input_file1, input_file2, prefix_filepath, output_file):
-    """
-    Given two files containing different transcriptions of audio files, this function calculates the similarity (levenshtein distance) between the sentences,
-    saving the result in a third file.
-
-        Parameters:
-        input_file1 (str): First filepath. The contents of the file must follow the template: "filename | text"
-        input_file2 (str): Second filepath. The contents of the file must follow the template: "filename | text"
-        prefix_filepath: Prefix to be added to the file path within the output file.
-
-        Returns:
-        output_file (str): Returns output filepath. The content of the file follows the template: prefix_filepath/filename | text1 | text2 | similarity
-    """
-
-    # Loads the contents of the first input file
-    try:
-        with open(input_file1, encoding='utf-8') as f:
-            content_file1 = f.readlines()
-
-    except KeyboardInterrupt:
-        print("KeyboardInterrupt detected!")
-        exit()
-
-    except IOError:
-      print("Error: File {} does not appear to exist.".format(input_file1))
-      return False
-
-    # Loads the contents of the second input file
-    try:
-        with open(input_file2, encoding='utf-8') as g:
-            content_file2 = g.readlines()
-
-    except KeyboardInterrupt:
-        print("KeyboardInterrupt detected!")
-        exit()
-
-    except IOError:
-      print("Error: File {} does not appear to exist.".format(input_file2))
-      return False
-
-    # Both files must be the same length, otherwise there is an error.
-    if not (len(content_file1) == len(content_file2)):
-        print("Error: length File {} not igual to File {}.".format(content_file1, content_file2))
-        return False
-
-    # Checks if the output folder exists
-    output_folderpath = dirname(output_file)
-
-    if not(exists(output_folderpath)):
-        makedirs(output_folderpath)
-
-    # Saves the result to the output file.
-    try:
-        o_file = open(output_file, 'w', encoding='utf-8')
-
-    except KeyboardInterrupt:
-        print("KeyboardInterrupt detected!")
-        exit()
-
-    except IOError:
-        print("Error: creating File {} problem.".format(output_file))
-        return False
-
-    # Iterate over the two files content simultaneously to calculate the similarity between the sentences.
-    else:
-        separator = '|'
-        header = separator.join(['filename', 'subtitle', 'transcript', 'similarity'])
-        o_file.write(header + '\n')
-
-        # Input files must be csv files with the character "|" as a separator: filename | text
-        for line1, line2 in tqdm(zip(content_file1, content_file2), total=len(content_file1)):
-
-            file1, text1 = line1.split('|')
-            file2, text2 = line2.split('|')
-
-            # Clears sentences by removing unwanted characters.
-            clean_text1 = clear_sentences(text1)
-            clean_text2 = clear_sentences(text2)
-            filepath = join(prefix_filepath, file1)
-
-            # Calculates the levenshtein distance to define the normalized similarity (0-1) between two sentences.
-            l = levenshtein.normalized_similarity(clean_text1, clean_text2)
-
-            # Defines the output content and writes to a file.
-            line = separator.join([filepath, text1.strip(), text2.strip(), str(l)])           
-            o_file.write(line + '\n')
-
-    finally:
-        o_file.close()
-
-    return True
-
-
-def main():
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--base_dir', default='./')
-    parser.add_argument('--input_file1', default='metadata1.csv', help='Input first filename')
-    parser.add_argument('--input_file2', default='metadata2.csv', help='Input second filename')
-    parser.add_argument('--prefix', default='', help='Prefix to filename on metadata output file.')
-    parser.add_argument('--output_dir', default='output', help='Directory to save distances')
-    parser.add_argument('--output_file', default='validation.csv', help='Output file with the template: "filename, text1, text2, similarity"')
-
-    args = parser.parse_args()
-
-    input_path_file1 = join(args.base_dir, args.input_file1)
-    input_path_file2 = join(args.base_dir, args.input_file2)
-    output_path_file = join(args.base_dir, args.output_dir, args.output_file)
-
-    create_validation_file(input_path_file1, input_path_file2, args.prefix, output_path_file)
-
-
-if __name__ == "__main__":
-    main()#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
-Validador de Transcrições usando Distância Levenshtein
-Compara wav2vec2 vs whisper e salva aprovados em CSV cumulativo
-Versão KISS - simples e funcional
+Validador de Texto STT usando Distancia Levenshtein
+Versao simplificada que trabalha com JSON de entrada e saida
+Filosofia KISS - simples e funcional, sem emojis
 """
 
 import json
-import os
-import csv
-import glob
-from datetime import datetime
+import logging
+from pathlib import Path
+from typing import Optional, Dict
 from textdistance import levenshtein
 
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s:%(name)s:%(message)s'
+)
+logger = logging.getLogger(__name__)
 
-class ValidadorTranscricao:
+
+def validate_normalized_texts(input_json_path: str) -> Dict:
     """
-    Validador de transcrições baseado em similaridade Levenshtein
+    Valida textos normalizados calculando similaridade Levenshtein
+    Adiciona scores MOS dos segmentos originais
+    
+    Args:
+        input_json_path: Caminho para o arquivo JSON com textos normalizados
+        
+    Returns:
+        Dicionario com resultados da validacao
     """
+    input_path = Path(input_json_path)
     
-    def __init__(self, pasta_jsons, threshold=0.85, csv_saida="validacao_transcricoes.csv"):
-        """
-        Inicializa o validador
-        
-        Args:
-            pasta_jsons (str): Caminho da pasta contendo os JSONs
-            threshold (float): Limite mínimo de similaridade (0.0 a 1.0)
-            csv_saida (str): Nome do arquivo CSV de saída
-        """
-        self.pasta_jsons = pasta_jsons
-        self.threshold = threshold
-        self.csv_saida = os.path.join(pasta_jsons, csv_saida)
-        self.colunas_csv = [
-            'filename', 
-            'wav2vec2_original', 
-            'wav2vec2_normalized', 
-            'whisper_original', 
-            'whisper_normalized', 
-            'similarity'
-        ]
-        
-    def calcular_similaridade(self, texto1, texto2):
-        """
-        Calcula similaridade Levenshtein normalizada entre dois textos
-        
-        Args:
-            texto1 (str): Primeiro texto
-            texto2 (str): Segundo texto
-            
-        Returns:
-            float: Similaridade normalizada (0.0 a 1.0)
-        """
-        if not texto1 or not texto2:
-            return 0.0
-            
-        # Remove espaços extras para comparação mais justa
-        clean_texto1 = texto1.strip()
-        clean_texto2 = texto2.strip()
-        
-        if not clean_texto1 or not clean_texto2:
-            return 0.0
-            
-        # Calcula similaridade normalizada
-        similarity = levenshtein.normalized_similarity(clean_texto1, clean_texto2)
-        return similarity
+    # Valida arquivo de entrada
+    if not input_path.exists():
+        error_msg = f"Arquivo de entrada nao encontrado: {input_json_path}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
     
-    def buscar_arquivos_json(self):
-        """
-        Busca todos os arquivos *_normalized_text.json na pasta
-        
-        Returns:
-            list: Lista de caminhos dos arquivos JSON encontrados
-        """
-        padrao = os.path.join(self.pasta_jsons, "*_normalized_text.json")
-        arquivos = glob.glob(padrao)
-        return arquivos
+    logger.info(f"Processando arquivo: {input_path}")
     
-    def processar_json(self, caminho_json):
-        """
-        Processa um arquivo JSON e retorna dados dos segmentos aprovados
+    try:
+        # Le JSON de entrada
+        with open(input_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
         
-        Args:
-            caminho_json (str): Caminho do arquivo JSON
-            
-        Returns:
-            list: Lista de dicionários com dados dos segmentos aprovados
-        """
-        try:
-            with open(caminho_json, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except Exception as e:
-            print(f"Erro ao carregar {caminho_json}: {e}")
-            return []
-        
+        video_id = data.get('video_id', 'unknown')
+        session_dir = data.get('session_dir', '')
+        total_segments = data.get('total_segments', 0)
         normalized_pairs = data.get('normalized_pairs', {})
+        
         if not normalized_pairs:
-            print(f"Nenhum par normalizado encontrado em {caminho_json}")
-            return []
+            error_msg = "Nenhum par normalizado encontrado no JSON"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
         
-        aprovados = []
-        total_pares = len(normalized_pairs)
-        aprovados_count = 0
+        logger.info(f"Video ID: {video_id}")
+        logger.info(f"Total de segmentos: {total_segments}")
         
-        print(f"Processando {total_pares} pares de {os.path.basename(caminho_json)}")
+        # Carregar scores MOS
+        mos_scores_dict = {}
+        if session_dir:
+            mos_json_path = Path(session_dir) / "segments" / f"{video_id}_mos_scores.json"
+            
+            if mos_json_path.exists():
+                try:
+                    with open(mos_json_path, 'r', encoding='utf-8') as f:
+                        mos_scores_dict = json.load(f)
+                    logger.info(f"MOS scores carregados: {len(mos_scores_dict)} segmentos")
+                except Exception as e:
+                    logger.warning(f"Erro ao carregar MOS scores: {e}")
+            else:
+                logger.warning(f"Arquivo MOS nao encontrado: {mos_json_path}")
+        
+        # Processa cada par calculando similaridade e adicionando MOS
+        validated_count = 0
+        similarities = []
+        mos_scores_found = 0
         
         for segment_id, pair_data in normalized_pairs.items():
-            # Extrai textos normalizados para comparação
-            wav2vec2_norm = pair_data.get('wav2vec2_normalized', '').strip()
             whisper_norm = pair_data.get('whisper_normalized', '').strip()
+            wav2vec2_norm = pair_data.get('wav2vec2_normalized', '').strip()
             
-            # Extrai textos originais para salvar
-            wav2vec2_orig = pair_data.get('wav2vec2_original', '').strip()
-            whisper_orig = pair_data.get('whisper_original', '').strip()
-            
-            # Extrai filename
-            filename = pair_data.get('segment_filename', f"{segment_id}.wav")
-            
-            # Verifica se textos são válidos
-            if not wav2vec2_norm or not whisper_norm:
+            # Verifica se textos sao validos
+            if not whisper_norm or not wav2vec2_norm:
+                logger.warning(f"Textos vazios em {segment_id}, pulando")
+                pair_data['levenshtein_similarity'] = 0.0
+                pair_data['mos_score'] = None
                 continue
-                
-            # Calcula similaridade
-            similarity = self.calcular_similaridade(wav2vec2_norm, whisper_norm)
             
-            # Verifica se passa no threshold
-            if similarity >= self.threshold:
-                aprovados_count += 1
-                
-                aprovado = {
-                    'filename': filename,
-                    'wav2vec2_original': wav2vec2_orig,
-                    'wav2vec2_normalized': wav2vec2_norm,
-                    'whisper_original': whisper_orig,
-                    'whisper_normalized': whisper_norm,
-                    'similarity': round(similarity, 6)
-                }
-                aprovados.append(aprovado)
-        
-        taxa_aprovacao = (aprovados_count / total_pares * 100) if total_pares > 0 else 0
-        print(f"  Aprovados: {aprovados_count}/{total_pares} ({taxa_aprovacao:.1f}%)")
-        
-        return aprovados
-    
-    def salvar_csv_cumulativo(self, novos_dados):
-        """
-        Salva dados no CSV de forma cumulativa (append)
-        
-        Args:
-            novos_dados (list): Lista de dicionários com novos dados
-        """
-        if not novos_dados:
-            print("Nenhum dado novo para salvar")
-            return
+            # Calcula similaridade Levenshtein normalizada
+            similarity = levenshtein.normalized_similarity(whisper_norm, wav2vec2_norm)
             
-        # Verifica se arquivo existe para decidir se escreve header
-        arquivo_existe = os.path.exists(self.csv_saida)
+            # Adiciona campo de similaridade
+            pair_data['levenshtein_similarity'] = round(similarity, 6)
+            
+            # Extrair prefixo do segment_id para buscar MOS
+            # Ex: "EhzSC3LWez4_segment_000_stt_001" -> "EhzSC3LWez4_segment_000"
+            prefix = segment_id
+            if '_stt_' in segment_id:
+                prefix = segment_id.split('_stt_')[0]
+            
+            # Buscar MOS score pelo prefixo
+            mos_score = mos_scores_dict.get(prefix, None)
+            pair_data['mos_score'] = mos_score
+            
+            if mos_score is not None:
+                mos_scores_found += 1
+                logger.debug(f"{segment_id}: similarity={similarity:.4f}, mos={mos_score}")
+            else:
+                logger.warning(f"{segment_id}: MOS nao encontrado para prefixo '{prefix}'")
+            
+            validated_count += 1
+            similarities.append(similarity)
         
-        try:
-            with open(self.csv_saida, 'a', newline='', encoding='utf-8') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=self.colunas_csv)
-                
-                # Escreve header apenas se arquivo não existe
-                if not arquivo_existe:
-                    writer.writeheader()
-                    print(f"Criado novo CSV: {self.csv_saida}")
-                
-                # Escreve todos os novos dados
-                for row in novos_dados:
-                    writer.writerow(row)
-                
-                print(f"Adicionados {len(novos_dados)} registros ao CSV")
-                
-        except Exception as e:
-            print(f"Erro ao salvar CSV: {e}")
-    
-    def validar_todos_jsons(self):
-        """
-        Processa todos os JSONs da pasta e salva resultados
+        # Calcula estatisticas
+        avg_similarity = sum(similarities) / len(similarities) if similarities else 0.0
+        min_similarity = min(similarities) if similarities else 0.0
+        max_similarity = max(similarities) if similarities else 0.0
         
-        Returns:
-            dict: Estatísticas da validação
-        """
-        print("=" * 60)
-        print("VALIDADOR DE TRANSCRIÇÕES - SIMILARIDADE LEVENSHTEIN")
-        print("=" * 60)
-        print(f"Pasta: {self.pasta_jsons}")
-        print(f"Threshold: {self.threshold}")
-        print(f"CSV saída: {self.csv_saida}")
-        print("=" * 60)
+        logger.info(f"Validados: {validated_count}/{total_segments}")
+        logger.info(f"MOS encontrados: {mos_scores_found}/{validated_count}")
+        logger.info(f"Similaridade media: {avg_similarity:.4f}")
+        logger.info(f"Similaridade minima: {min_similarity:.4f}")
+        logger.info(f"Similaridade maxima: {max_similarity:.4f}")
         
-        # Busca arquivos JSON
-        arquivos_json = self.buscar_arquivos_json()
-        
-        if not arquivos_json:
-            print("Nenhum arquivo *_normalized_text.json encontrado!")
-            return {'arquivos_processados': 0, 'total_aprovados': 0}
-        
-        print(f"Encontrados {len(arquivos_json)} arquivos JSON")
-        print("-" * 60)
-        
-        # Processa todos os arquivos
-        todos_aprovados = []
-        arquivos_processados = 0
-        
-        for arquivo_json in arquivos_json:
-            aprovados = self.processar_json(arquivo_json)
-            if aprovados:
-                todos_aprovados.extend(aprovados)
-                arquivos_processados += 1
-            print("-" * 40)
-        
-        # Salva resultados no CSV
-        self.salvar_csv_cumulativo(todos_aprovados)
-        
-        # Estatísticas finais
-        stats = {
-            'arquivos_encontrados': len(arquivos_json),
-            'arquivos_processados': arquivos_processados,
-            'total_aprovados': len(todos_aprovados),
-            'threshold_usado': self.threshold,
-            'timestamp': datetime.now().isoformat()
+        # Prepara JSON de saida com TODOS os campos originais + levenshtein_similarity + mos_score
+        output_data = {
+            "video_id": video_id,
+            "session_dir": session_dir,
+            "total_segments": total_segments,
+            "validated_segments": validated_count,
+            "mos_scores_found": mos_scores_found,
+            "average_similarity": round(avg_similarity, 6),
+            "min_similarity": round(min_similarity, 6),
+            "max_similarity": round(max_similarity, 6),
+            "normalized_pairs": normalized_pairs
         }
         
-        print("=" * 60)
-        print("RESUMO DA VALIDAÇÃO:")
-        print(f"  Arquivos JSON encontrados: {stats['arquivos_encontrados']}")
-        print(f"  Arquivos processados: {stats['arquivos_processados']}")
-        print(f"  Total de aprovados: {stats['total_aprovados']}")
-        print(f"  Threshold usado: {stats['threshold_usado']}")
-        print(f"  CSV atualizado: {self.csv_saida}")
-        print("=" * 60)
+        # Define nome e caminho do arquivo de saida
+        output_filename = f"{video_id}_text_validation.json"
+        output_path = input_path.parent / output_filename
         
-        return stats
+        # Salva JSON de saida
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Arquivo de validacao salvo em: {output_path}")
+        
+        return {
+            "success": True,
+            "input_file": str(input_path),
+            "output_file": str(output_path),
+            "video_id": video_id,
+            "total_segments": total_segments,
+            "validated_segments": validated_count,
+            "mos_scores_found": mos_scores_found,
+            "average_similarity": avg_similarity,
+            "min_similarity": min_similarity,
+            "max_similarity": max_similarity
+        }
+        
+    except json.JSONDecodeError as e:
+        error_msg = f"Erro ao decodificar JSON: {e}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    except Exception as e:
+        error_msg = f"Erro durante validacao: {e}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+
+def validate_all_sessions(base_dir: str = "../../audios_baixados/output") -> Dict:
+    """
+    Valida todas as sessoes encontradas no diretorio base
+    
+    Args:
+        base_dir: Diretorio base com sessoes
+        
+    Returns:
+        Dicionario com resultados de todas as validacoes
+    """
+    base_path = Path(base_dir)
+    
+    if not base_path.exists():
+        error_msg = f"Diretorio base nao encontrado: {base_dir}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    # Busca todos os arquivos *_normalized_text.json
+    normalized_files = list(base_path.rglob("*_normalized_text.json"))
+    
+    if not normalized_files:
+        error_msg = f"Nenhum arquivo normalizado encontrado em {base_dir}"
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
+    
+    logger.info(f"Encontrados {len(normalized_files)} arquivos para validar")
+    
+    results = {
+        "success": True,
+        "total_files": len(normalized_files),
+        "processed_files": [],
+        "failed_files": []
+    }
+    
+    for normalized_file in normalized_files:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Processando: {normalized_file.name}")
+        logger.info(f"{'='*60}")
+        
+        result = validate_normalized_texts(str(normalized_file))
+        
+        if result["success"]:
+            results["processed_files"].append({
+                "file": str(normalized_file),
+                "output": result["output_file"],
+                "video_id": result["video_id"],
+                "avg_similarity": result["average_similarity"]
+            })
+        else:
+            results["failed_files"].append({
+                "file": str(normalized_file),
+                "error": result.get("error")
+            })
+    
+    # Resumo
+    logger.info(f"\n{'='*60}")
+    logger.info("RESUMO DA VALIDACAO")
+    logger.info(f"{'='*60}")
+    logger.info(f"Total de arquivos: {results['total_files']}")
+    logger.info(f"Processados com sucesso: {len(results['processed_files'])}")
+    logger.info(f"Falharam: {len(results['failed_files'])}")
+    
+    return results
 
 
 def main():
-    """
-    Função principal para execução via linha de comando
-    """
-    print("VALIDADOR DE TRANSCRIÇÕES POR SIMILARIDADE")
-    print("Compara wav2vec2 vs whisper usando Levenshtein")
-    print("=" * 50)
+    """Ponto de entrada principal"""
+    import argparse
     
-    # Input do usuário
-    pasta = input("Digite o caminho da pasta com os JSONs: ").strip()
+    parser = argparse.ArgumentParser(
+        description='Valida textos STT normalizados usando Levenshtein'
+    )
     
-    if not os.path.exists(pasta):
-        print(f"Erro: Pasta não encontrada: {pasta}")
-        return
+    parser.add_argument(
+        'input_json',
+        nargs='?',
+        help='Caminho do arquivo JSON normalizado (opcional com --all)'
+    )
     
-    try:
-        threshold_input = input("Digite o threshold (0.0 a 1.0, padrão 0.85): ").strip()
-        threshold = float(threshold_input) if threshold_input else 0.85
+    parser.add_argument(
+        '--base-dir',
+        default='../../audios_baixados/output',
+        help='Diretorio base para buscar arquivos (com --all)'
+    )
+    
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Processa todos os arquivos normalizados no diretorio base'
+    )
+    
+    args = parser.parse_args()
+    
+    logger.info("VALIDADOR DE TEXTO STT - LEVENSHTEIN")
+    logger.info("="*50)
+    
+    if args.all or args.input_json is None:
+        logger.info("Modo: Validacao de todos os arquivos")
+        result = validate_all_sessions(args.base_dir)
         
-        if not 0.0 <= threshold <= 1.0:
-            print("Threshold deve estar entre 0.0 e 1.0. Usando padrão 0.85")
-            threshold = 0.85
-            
-    except ValueError:
-        print("Valor inválido. Usando threshold padrão 0.85")
-        threshold = 0.85
+        if result["success"]:
+            logger.info("\nValidacao concluida!")
+            logger.info(f"Arquivos processados: {len(result['processed_files'])}")
+            if result['failed_files']:
+                logger.warning(f"Arquivos com erro: {len(result['failed_files'])}")
+        else:
+            logger.error(f"Erro: {result.get('error')}")
     
-    # Cria validador e executa
-    validador = ValidadorTranscricao(pasta, threshold)
-    stats = validador.validar_todos_jsons()
-    
-    if stats['total_aprovados'] > 0:
-        print(f"\n✅ Validação concluída com sucesso!")
-        print(f"Verifique o arquivo: {validador.csv_saida}")
     else:
-        print(f"\n⚠️  Nenhum segmento aprovado com threshold {threshold}")
+        logger.info(f"Modo: Validacao de arquivo especifico")
+        result = validate_normalized_texts(args.input_json)
+        
+        if result["success"]:
+            logger.info("Validacao concluida com sucesso!")
+            logger.info(f"Arquivo de saida: {result['output_file']}")
+            logger.info(f"Similaridade media: {result['average_similarity']:.4f}")
+        else:
+            logger.error(f"Erro: {result.get('error')}")
 
 
 if __name__ == "__main__":

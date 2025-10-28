@@ -7,10 +7,10 @@ import torchaudio
 import numpy as np
 import logging
 import shutil
+import json  
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 import warnings
-
 logger = logging.getLogger(__name__)
 
 class MOSQualityFilter:
@@ -317,13 +317,15 @@ class MOSQualityFilter:
         except:
             return 2000.0  # Default speech-like centroid
     
-    def filter_audio_segments(self, segment_paths: List[Path], output_dir: Optional[Path] = None) -> Tuple[List[Path], List[Path], List[Path]]:
+    def filter_audio_segments(self, segment_paths: List[Path], output_dir: Optional[Path] = None, video_id: Optional[str] = None) -> Tuple[List[Path], List[Path], List[Path]]:
         """
         Filter audio segments based on MOS quality scores into three categories.
+        Salva scores em JSON para uso posterior.
         
         Args:
             segment_paths: List of audio segment paths
             output_dir: Base directory to save categorized segments (optional)
+            video_id: ID do video para nomear o JSON (optional)
             
         Returns:
             Tuple of (approved_segments, intermediate_segments, rejected_segments)
@@ -331,6 +333,9 @@ class MOSQualityFilter:
         approved_segments = []
         intermediate_segments = []
         rejected_segments = []
+        
+        # Dicionario para guardar scores MOS
+        mos_scores_dict = {}
         
         # Create output directories
         if output_dir:
@@ -342,14 +347,14 @@ class MOSQualityFilter:
             intermediate_dir.mkdir(parents=True, exist_ok=True)
             rejected_dir.mkdir(parents=True, exist_ok=True)
         
-        logger.info(f"🔍 Filtering {len(segment_paths)} audio segments with 3-tier MOS classification")
+        logger.info(f"Filtering {len(segment_paths)} audio segments with 3-tier MOS classification")
         
         for i, segment_path in enumerate(segment_paths):
             try:
                 # Predict MOS score
                 mos_score = self.predict_mos_score(segment_path)
                 
-                logger.info(f"📊 {segment_path.name}: MOS = {mos_score:.2f}")
+                logger.info(f"{segment_path.name}: MOS = {mos_score:.2f}")
                 
                 # Import naming utilities
                 from naming_utils import extract_base_name, generate_standard_name
@@ -357,10 +362,14 @@ class MOSQualityFilter:
                 # Extract base name and create standardized filename
                 base_name = extract_base_name(segment_path)
                 
+                # Guardar score MOS com nome original do segmento
+                segment_original_name = segment_path.stem
+                mos_scores_dict[segment_original_name] = round(mos_score, 2)
+                
                 if mos_score >= 3.0:
                     # Aprovados - acima de 3,0
                     approved_segments.append(segment_path)
-                    logger.info(f"✅ Approved: {segment_path.name} (MOS: {mos_score:.2f})")
+                    logger.info(f"Approved: {segment_path.name} (MOS: {mos_score:.2f})")
                     
                     if output_dir:
                         try:
@@ -372,14 +381,14 @@ class MOSQualityFilter:
                             
                             # Copy the approved file
                             shutil.copy2(segment_path, approved_path)
-                            logger.debug(f"📁 Saved approved segment: {approved_filename}")
+                            logger.debug(f"Saved approved segment: {approved_filename}")
                         except Exception as e:
-                            logger.warning(f"⚠️ Could not save approved segment {segment_path.name}: {e}")
+                            logger.warning(f"Could not save approved segment {segment_path.name}: {e}")
                             
                 elif mos_score >= 2.5:
-                    # Intermediários - de 2,5 até 3,0
+                    # Intermediarios - de 2,5 ate 3,0
                     intermediate_segments.append(segment_path)
-                    logger.info(f"🟡 Intermediate: {segment_path.name} (MOS: {mos_score:.2f})")
+                    logger.info(f"Intermediate: {segment_path.name} (MOS: {mos_score:.2f})")
                     
                     if output_dir:
                         try:
@@ -391,13 +400,13 @@ class MOSQualityFilter:
                             
                             # Copy the intermediate file
                             shutil.copy2(segment_path, intermediate_path)
-                            logger.debug(f"📁 Saved intermediate segment: {intermediate_filename}")
+                            logger.debug(f"Saved intermediate segment: {intermediate_filename}")
                         except Exception as e:
-                            logger.warning(f"⚠️ Could not save intermediate segment {segment_path.name}: {e}")
+                            logger.warning(f"Could not save intermediate segment {segment_path.name}: {e}")
                 else:
                     # Ruins - abaixo de 2,5
                     rejected_segments.append(segment_path)
-                    logger.warning(f"❌ Rejected: {segment_path.name} (MOS: {mos_score:.2f} < 2.5)")
+                    logger.warning(f"Rejected: {segment_path.name} (MOS: {mos_score:.2f} < 2.5)")
                     
                     if output_dir:
                         try:
@@ -409,17 +418,21 @@ class MOSQualityFilter:
                             
                             # Copy the rejected file
                             shutil.copy2(segment_path, rejected_path)
-                            logger.debug(f"📁 Saved rejected segment: {rejected_filename}")
+                            logger.debug(f"Saved rejected segment: {rejected_filename}")
                         except Exception as e:
-                            logger.warning(f"⚠️ Could not save rejected segment {segment_path.name}: {e}")
+                            logger.warning(f"Could not save rejected segment {segment_path.name}: {e}")
                 
                 # Progress logging
                 if (i + 1) % 10 == 0:
-                    logger.info(f"📈 Processed {i + 1}/{len(segment_paths)} segments...")
+                    logger.info(f"Processed {i + 1}/{len(segment_paths)} segments...")
                     
             except Exception as e:
-                logger.error(f"❌ Error processing {segment_path.name}: {e}")
+                logger.error(f"Error processing {segment_path.name}: {e}")
                 rejected_segments.append(segment_path)
+                
+                # Guardar score 0.0 para segmentos com erro
+                segment_original_name = segment_path.stem
+                mos_scores_dict[segment_original_name] = 0.0
                 
                 # Save error segment to rejected directory
                 if output_dir:
@@ -429,13 +442,37 @@ class MOSQualityFilter:
                         error_path = rejected_dir / error_filename
                         shutil.copy2(segment_path, error_path)
                     except Exception as e:
-                        logger.warning(f"⚠️ Could not save MOS error segment {segment_path.name}: {e}")
+                        logger.warning(f"Could not save MOS error segment {segment_path.name}: {e}")
         
-        logger.info(f"🎯 3-tier filtering complete:")
-        logger.info(f"   ✅ Approved (≥3.0): {len(approved_segments)}")
-        logger.info(f"   🟡 Intermediate (2.5-3.0): {len(intermediate_segments)}")
-        logger.info(f"   ❌ Rejected (<2.5): {len(rejected_segments)}")
+        logger.info(f"3-tier filtering complete:")
+        logger.info(f"   Approved (>=3.0): {len(approved_segments)}")
+        logger.info(f"   Intermediate (2.5-3.0): {len(intermediate_segments)}")
+        logger.info(f"   Rejected (<2.5): {len(rejected_segments)}")
         
+        # Salvar JSON com scores MOS (formato simplificado)
+        if output_dir and mos_scores_dict:
+            # Extrair video_id do primeiro segmento se nao foi fornecido
+            if not video_id and segment_paths:
+                first_segment = segment_paths[0].stem
+                video_id = first_segment.split('_segment_')[0] if '_segment_' in first_segment else 'unknown'
+            
+            # Converter numpy.float32 para float Python
+            mos_scores_python = {
+                segment: float(score) for segment, score in mos_scores_dict.items()
+            }
+            
+            # Salvar na pasta segments
+            segments_dir = output_dir / "segments"
+            segments_dir.mkdir(parents=True, exist_ok=True)
+            
+            mos_json_path = segments_dir / f"{video_id}_mos_scores.json"
+            
+            try:
+                with open(mos_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(mos_scores_python, f, indent=2, ensure_ascii=False)
+                logger.info(f"MOS scores saved to: {mos_json_path}")
+            except Exception as e:
+                logger.error(f"Failed to save MOS scores JSON: {e}")
         return approved_segments, intermediate_segments, rejected_segments
     
     def get_quality_report(self, segment_paths: List[Path]) -> dict:
