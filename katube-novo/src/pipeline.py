@@ -580,6 +580,7 @@ class AudioProcessingPipeline:
                 logger.warning("Skipping validation - normalization failed")
                 combined_results['validation'] = {"error": "Normalization failed"}
             
+
             # Step 9: Filter by similarity threshold and MOS, then apply denoising
             if combined_results.get('validation', {}).get('success'):
                 try:
@@ -594,8 +595,31 @@ class AudioProcessingPipeline:
                         )
                         combined_results['filter_and_denoise'] = filter_result
                         logger.info(f"Filtering and denoising completed:")
-                        logger.info(f"   - Validated count: {filter_result.get('validated_count', 0)}")
-                        logger.info(f"   - Denoised count: {filter_result.get('denoised_count', 0)}")
+                        logger.info(f"   - Approved count: {filter_result.get('approved_count', 0)}")
+                        logger.info(f"   - Denoised count: {filter_result.get('denoised_success', 0)}")
+                        
+                        # Step 10: Sox normalization of approved audios
+                        if filter_result.get('success'):
+                            try:
+                                denoiser_dir = Path(filter_result.get('denoiser_dir'))
+                                video_id = filter_result.get('video_id')
+                                
+                                sox_result = self.sox_normalize_approved_audios(
+                                    denoiser_dir=denoiser_dir,
+                                    video_id=video_id
+                                )
+                                combined_results['sox_normalization'] = sox_result
+                                
+                                if sox_result.get('success'):
+                                    logger.info(f"Sox normalization completed:")
+                                    logger.info(f"   - Normalized: {sox_result.get('success_count', 0)}/{sox_result.get('total_files', 0)}")
+                                    logger.info(f"   - Output: {sox_result.get('output_dir')}")
+                                else:
+                                    logger.warning(f"Sox normalization failed: {sox_result.get('error')}")
+                                    
+                            except Exception as e:
+                                logger.error(f"Error in Sox normalization: {e}")
+                                combined_results['sox_normalization'] = {"error": str(e)}
                     else:
                         logger.warning("Validation output file not found, skipping filter and denoise")
                         
@@ -986,26 +1010,28 @@ class AudioProcessingPipeline:
                                    similarity_threshold: float = 0.80,
                                    mos_range: Tuple[float, float] = (2.5, 3.0)) -> Dict[str, Any]:
         """
-        Step 9: Filter segments by similarity threshold AND MOS range, then apply denoising.
+        Step 9: Filter segments by similarity AND MOS, apply denoising when needed.
+        Creates final JSON with all segment data + utilizou_denoiser status.
         
         Args:
             validation_json_path: Path to validation JSON file
-            output_dir: Directory to save processed segments
-            similarity_threshold: Minimum similarity score to accept (default 0.80)
-            mos_range: MOS range tuple (min, max) for denoising (default (2.5, 3.0))
+            output_dir: Session directory
+            similarity_threshold: Minimum similarity to accept (default 0.80)
+            mos_range: MOS range for denoising (default (2.5, 3.0))
             
         Returns:
-            Dictionary with filtering and denoising results
+            Dictionary with processing results
         """
         logger.info(f"=== STEP 9: FILTERING AND DENOISING SEGMENTS ===")
-        logger.info(f"Similarity threshold: {similarity_threshold}")
-        logger.info(f"MOS range for denoising: {mos_range[0]} - {mos_range[1]}")
+        logger.info(f"Similarity threshold: >= {similarity_threshold}")
+        logger.info(f"MOS range for denoising: [{mos_range[0]}, {mos_range[1]}]")
         
         try:
-            # Carregar JSON de validacao
             import json
+            import shutil
             from pathlib import Path as PathLib
             
+            # Carregar JSON de validacao
             validation_path = PathLib(validation_json_path)
             
             if not validation_path.exists():
@@ -1024,24 +1050,33 @@ class AudioProcessingPipeline:
                 logger.error(error_msg)
                 return {"success": False, "error": error_msg}
             
-            logger.info(f"Loaded validation data: {len(normalized_pairs)} segments")
+            logger.info(f"Processing {len(normalized_pairs)} segments for video: {video_id}")
             
-            # Create output directories
-            validated_dir = output_dir / 'audios_validados_tts'
-            denoised_dir = output_dir / 'audios_denoiser'
+            # Criar pasta de saida (todos os aprovados ficam aqui)
+            denoiser_dir = output_dir / 'audios_denoiser'
+            denoiser_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Criar pastas de rejeitados
             rejected_similarity_dir = output_dir / 'audio_rejeitado_validacao'
             rejected_mos_dir = output_dir / 'audio_rejeitado_mos_range'
-            
-            validated_dir.mkdir(parents=True, exist_ok=True)
-            denoised_dir.mkdir(parents=True, exist_ok=True)
             rejected_similarity_dir.mkdir(parents=True, exist_ok=True)
             rejected_mos_dir.mkdir(parents=True, exist_ok=True)
             
-            # Listas para categorizar segmentos
-            approved_for_denoise = []
-            rejected_by_similarity = []
-            rejected_by_mos = []
-            approved_no_denoise = []
+            # Contadores para estatisticas
+            approved_with_denoise = 0
+            approved_without_denoise = 0
+            rejected_by_similarity = 0
+            rejected_by_mos = 0
+            denoised_success = 0
+            
+            # JSON final que sera salvo
+            final_json = {
+                "video_id": video_id,
+                "total_segments": len(normalized_pairs),
+                "approved_count": 0,
+                "rejected_count": 0,
+                "segments": {}
+            }
             
             # Processar cada segmento
             for segment_id, pair_data in normalized_pairs.items():
@@ -1049,133 +1084,245 @@ class AudioProcessingPipeline:
                 mos_score = pair_data.get('mos_score')
                 flac_file = pair_data.get('flac_file')
                 
-                if not flac_file:
-                    logger.warning(f"No FLAC file for segment: {segment_id}")
-                    continue
+                logger.info(f"\nProcessing: {segment_id}")
+                logger.info(f"  Similarity: {similarity:.3f}, MOS: {mos_score}")
                 
-                # Buscar arquivo FLAC em stt_ready
+                # Inicializar campos novos
+                utilizou_denoiser = False
+                status = None
+                
+                # Buscar arquivo FLAC original
                 audio_file = None
                 stt_ready_dir = output_dir / 'stt_ready'
                 
                 if stt_ready_dir.exists():
-                    # Buscar recursivamente em subpastas speaker_XX
                     for speaker_dir in stt_ready_dir.iterdir():
                         if speaker_dir.is_dir():
                             for flac_path in speaker_dir.glob("*.flac"):
-                                if flac_file in flac_path.name or segment_id.split('_stt_')[0] in flac_path.stem:
+                                # Extrair prefixo do segment_id (antes de _stt_)
+                                prefix = segment_id.split('_stt_')[0] if '_stt_' in segment_id else segment_id
+                                if prefix in flac_path.stem or (flac_file and flac_file in flac_path.name):
                                     audio_file = flac_path
                                     break
                         if audio_file:
                             break
                 
                 if not audio_file or not audio_file.exists():
-                    logger.warning(f"Audio file not found for: {segment_id}")
+                    logger.warning(f"  Audio file not found, skipping")
                     continue
                 
-                # Aplicar filtros
+                # FILTRO 1: Similaridade
                 if similarity < similarity_threshold:
-                    # Rejeitado por similaridade
-                    rejected_by_similarity.append({
-                        'segment_id': segment_id,
-                        'similarity': similarity,
-                        'mos_score': mos_score,
-                        'audio_file': audio_file
-                    })
-                    logger.info(f"Rejected by similarity: {segment_id} (similarity={similarity:.3f})")
+                    status = "rejected_similarity"
+                    utilizou_denoiser = False
+                    rejected_by_similarity += 1
+                    
+                    logger.info(f"  REJECTED by similarity ({similarity:.3f} < {similarity_threshold})")
                     
                     # Copiar para pasta de rejeitados
-                    import shutil
                     rejected_path = rejected_similarity_dir / f"{segment_id}.flac"
                     shutil.copy2(audio_file, rejected_path)
-                    
+                
+                # FILTRO 2: MOS (se passou pelo filtro de similaridade)
                 elif mos_score is None:
-                    logger.warning(f"No MOS score for: {segment_id}, skipping")
+                    logger.warning(f"  No MOS score available, skipping")
+                    continue
+                
+                elif mos_score < mos_range[0]:
+                    status = "rejected_mos"
+                    utilizou_denoiser = False
+                    rejected_by_mos += 1
                     
-                elif mos_range[0] <= mos_score <= mos_range[1]:
-                    # Aprovado para denoising (similarity >= 0.80 E MOS em [2.5, 3.0])
-                    approved_for_denoise.append({
-                        'segment_id': segment_id,
-                        'similarity': similarity,
-                        'mos_score': mos_score,
-                        'audio_file': audio_file,
-                        'validated_path': validated_dir / f"{segment_id}.flac",
-                        'denoised_path': denoised_dir / f"{segment_id}_denoised.flac"
-                    })
-                    logger.info(f"Approved for denoise: {segment_id} (similarity={similarity:.3f}, mos={mos_score})")
-                    
-                elif mos_score >= 3.0:
-                    # Aprovado mas MOS alto - nao precisa denoising
-                    approved_no_denoise.append({
-                        'segment_id': segment_id,
-                        'similarity': similarity,
-                        'mos_score': mos_score,
-                        'audio_file': audio_file
-                    })
-                    logger.info(f"Approved (no denoise needed): {segment_id} (similarity={similarity:.3f}, mos={mos_score})")
-                    
-                else:
-                    # Rejeitado por MOS fora do range
-                    rejected_by_mos.append({
-                        'segment_id': segment_id,
-                        'similarity': similarity,
-                        'mos_score': mos_score,
-                        'audio_file': audio_file
-                    })
-                    logger.info(f"Rejected by MOS: {segment_id} (mos={mos_score})")
+                    logger.info(f"  REJECTED by MOS ({mos_score} < {mos_range[0]})")
                     
                     # Copiar para pasta de rejeitados por MOS
-                    import shutil
                     rejected_path = rejected_mos_dir / f"{segment_id}.flac"
                     shutil.copy2(audio_file, rejected_path)
+                
+                # APROVADO
+                else:
+                    status = "approved"
+                    
+                    # Decidir se aplica denoiser
+                    if mos_range[0] <= mos_score <= mos_range[1]:
+                        # Precisa denoising
+                        utilizou_denoiser = True
+                        approved_with_denoise += 1
+                        
+                        logger.info(f"  APPROVED - will apply DENOISER (MOS in [{mos_range[0]}, {mos_range[1]}])")
+                        
+                        # Aplicar denoising
+                        denoised_path = denoiser_dir / f"{segment_id}.flac"
+                        
+                        try:
+                            logger.info(f"  Applying DeepFilterNet3...")
+                            self.denoiser.process_file(
+                                str(audio_file),
+                                str(denoised_path)
+                            )
+                            denoised_success += 1
+                            logger.info(f"  Denoised successfully")
+                        except Exception as e:
+                            logger.error(f"  Error during denoising: {e}")
+                            # Se falhar, copiar original
+                            shutil.copy2(audio_file, denoised_path)
+                    
+                    else:
+                        # MOS > 3.0 - audio excelente, nao precisa denoising
+                        utilizou_denoiser = False
+                        approved_without_denoise += 1
+                        
+                        logger.info(f"  APPROVED - NO denoising needed (MOS {mos_score} > {mos_range[1]})")
+                        
+                        # Copiar original para pasta final
+                        approved_path = denoiser_dir / f"{segment_id}.flac"
+                        shutil.copy2(audio_file, approved_path)
+                        logger.info(f"  Copied original to audios_denoiser/")
+                
+                # Adicionar ao JSON final (TODOS os segmentos, aprovados e rejeitados)
+                final_json["segments"][segment_id] = {
+                    "txt_whisper": pair_data.get('txt_whisper'),
+                    "txt_wav2vec2": pair_data.get('txt_wav2vec2'),
+                    "flac_file": flac_file,
+                    "whisper_original": pair_data.get('whisper_original'),
+                    "whisper_normalized": pair_data.get('whisper_normalized'),
+                    "wav2vec2_original": pair_data.get('wav2vec2_original'),
+                    "wav2vec2_normalized": pair_data.get('wav2vec2_normalized'),
+                    "levenshtein_similarity": similarity,
+                    "mos_score": mos_score,
+                    "utilizou_denoiser": utilizou_denoiser,
+                    "status": status
+                }
             
-            # Estatisticas
-            logger.info(f"Filtering results:")
-            logger.info(f"   - Approved for denoising: {len(approved_for_denoise)}")
-            logger.info(f"   - Approved (no denoise): {len(approved_no_denoise)}")
-            logger.info(f"   - Rejected by similarity: {len(rejected_by_similarity)}")
-            logger.info(f"   - Rejected by MOS: {len(rejected_by_mos)}")
+            # Calcular estatisticas finais
+            approved_total = approved_with_denoise + approved_without_denoise
+            rejected_total = rejected_by_similarity + rejected_by_mos
             
-            # Copiar aprovados para validated_dir
-            import shutil
-            for seg in approved_for_denoise:
-                shutil.copy2(seg['audio_file'], seg['validated_path'])
-                logger.debug(f"Copied to validated: {seg['segment_id']}")
+            final_json["approved_count"] = approved_total
+            final_json["rejected_count"] = rejected_total
             
-            # Aplicar denoising
-            logger.info(f"Applying DeepFilterNet3 denoising to {len(approved_for_denoise)} segments...")
-            denoised_count = 0
+            # Salvar JSON final
+            final_json_path = denoiser_dir / f"{video_id}_final_audio_dataset.json"
             
-            for seg in approved_for_denoise:
-                try:
-                    logger.info(f"Denoising: {seg['segment_id']} (similarity={seg['similarity']:.3f}, mos={seg['mos_score']})")
-                    self.denoiser.process_file(
-                        str(seg['validated_path']), 
-                        str(seg['denoised_path'])
-                    )
-                    denoised_count += 1
-                    logger.info(f"Denoised and saved: {seg['segment_id']}")
-                except Exception as e:
-                    logger.error(f"Error denoising {seg['segment_id']}: {e}")
+            with open(final_json_path, 'w', encoding='utf-8') as f:
+                json.dump(final_json, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"Denoising completed: {denoised_count}/{len(approved_for_denoise)} segments processed")
+            logger.info(f"\n{'='*60}")
+            logger.info(f"FILTER AND DENOISE COMPLETED")
+            logger.info(f"{'='*60}")
+            logger.info(f"Total segments processed: {len(normalized_pairs)}")
+            logger.info(f"\nAPPROVED: {approved_total}")
+            logger.info(f"  - With denoising: {approved_with_denoise} (successfully denoised: {denoised_success})")
+            logger.info(f"  - Without denoising (MOS > {mos_range[1]}): {approved_without_denoise}")
+            logger.info(f"\nREJECTED: {rejected_total}")
+            logger.info(f"  - By similarity: {rejected_by_similarity}")
+            logger.info(f"  - By MOS: {rejected_by_mos}")
+            logger.info(f"\nFinal JSON saved: {final_json_path}")
+            logger.info(f"All approved audio files in: {denoiser_dir}")
+            logger.info(f"{'='*60}\n")
             
             return {
                 'success': True,
+                'video_id': video_id,
                 'total_segments': len(normalized_pairs),
-                'approved_for_denoise': len(approved_for_denoise),
-                'approved_no_denoise': len(approved_no_denoise),
-                'rejected_by_similarity': len(rejected_by_similarity),
-                'rejected_by_mos': len(rejected_by_mos),
-                'denoised_count': denoised_count,
-                'validated_count': len(approved_for_denoise),
-                'similarity_threshold': similarity_threshold,
-                'mos_range': mos_range,
-                'validated_dir': str(validated_dir),
-                'denoised_dir': str(denoised_dir)
+                'approved_count': approved_total,
+                'approved_with_denoise': approved_with_denoise,
+                'approved_without_denoise': approved_without_denoise,
+                'rejected_count': rejected_total,
+                'rejected_by_similarity': rejected_by_similarity,
+                'rejected_by_mos': rejected_by_mos,
+                'denoised_success': denoised_success,
+                'final_json_path': str(final_json_path),
+                'denoiser_dir': str(denoiser_dir)
             }
             
         except Exception as e:
-            logger.error(f"Error in filtering and denoising: {e}")
+            logger.error(f"Error in filter_and_denoise_segments: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {"success": False, "error": str(e)}
+
+    def sox_normalize_approved_audios(self, 
+                                      denoiser_dir: Path,
+                                      video_id: str) -> Dict[str, Any]:
+        """
+        Step 10: Normalize approved audio files with Sox.
+        Saves to: /katube-novo/dataset/audio_dataset/{video_id}/
+        
+        Args:
+            denoiser_dir: Directory with approved audio files (audios_denoiser/)
+            video_id: Video ID for folder name
+            
+        Returns:
+            Dictionary with normalization results
+        """
+        logger.info(f"=== STEP 10: SOX NORMALIZATION ===")
+        
+        try:
+            # Caminho base do dataset
+            dataset_base = Path("/home/anjos/Dropbox/PROJETO CEIA/Alcateia/Katube_2025_new/katube-novo/dataset/audio_dataset")
+            output_dir = dataset_base / video_id
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            logger.info(f"Dataset base: {dataset_base}")
+            logger.info(f"Output directory: {output_dir}")
+            
+            # Buscar todos os audios aprovados (exceto JSON)
+            audio_files = [f for f in denoiser_dir.glob("*.flac")]
+            
+            if not audio_files:
+                logger.warning("No audio files found in denoiser directory")
+                return {"success": False, "error": "No audio files to normalize"}
+            
+            logger.info(f"Found {len(audio_files)} audio files to normalize")
+            
+            # Contadores
+            success_count = 0
+            failed_count = 0
+            normalized_files = []
+            
+            # Normalizar cada audio
+            for i, audio_file in enumerate(audio_files, 1):
+                logger.info(f"\n[{i}/{len(audio_files)}] Processing: {audio_file.name}")
+                
+                # Output mantém nome original
+                output_path = output_dir / audio_file.name
+                
+                # Normalizar com Sox
+                result = self.sox_normalizer.normalize_audio(audio_file, output_path)
+                
+                if result['success']:
+                    success_count += 1
+                    normalized_files.append(str(output_path))
+                    logger.info(f"  SUCCESS -> {output_path.name}")
+                else:
+                    failed_count += 1
+                    logger.error(f"  FAILED: {result.get('error')}")
+            
+            # Log final
+            logger.info(f"\n{'='*60}")
+            logger.info(f"SOX NORMALIZATION COMPLETED")
+            logger.info(f"{'='*60}")
+            logger.info(f"Total files: {len(audio_files)}")
+            logger.info(f"  Success: {success_count}")
+            logger.info(f"  Failed: {failed_count}")
+            logger.info(f"Output directory: {output_dir}")
+            logger.info(f"{'='*60}\n")
+            
+            return {
+                'success': True,
+                'video_id': video_id,
+                'total_files': len(audio_files),
+                'success_count': success_count,
+                'failed_count': failed_count,
+                'output_dir': str(output_dir),
+                'normalized_files': normalized_files
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in Sox normalization: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {"success": False, "error": str(e)}
 
     def _extract_base_name_for_validation(self, filename: str) -> str:
