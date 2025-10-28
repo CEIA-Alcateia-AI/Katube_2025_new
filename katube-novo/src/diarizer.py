@@ -304,8 +304,7 @@ class EnhancedDiarizer:
                 stats = self.analyze_speaker_statistics(df)
                 
                 results[str(audio_path)] = {
-                    'annotation': processed_annotation,
-                    'dataframe': df,
+                    'dataframe': df.to_dict(orient="records"),
                     'statistics': stats,
                     'rttm_path': str(rttm_path) if save_rttm else None
                 }

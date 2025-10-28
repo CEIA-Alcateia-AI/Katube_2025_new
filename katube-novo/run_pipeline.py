@@ -74,7 +74,6 @@ def main():
     parser.add_argument("--mos-threshold", type=float, default=2.5, help="Limiar mínimo do filtro MOS.")
     parser.add_argument("--hf-token", type=str, default=os.getenv('HUGGINGFACE_TOKEN'), help="Token de acesso do Hugging Face (pode ser via variável de ambiente HUGGINGFACE_TOKEN).")
     parser.add_argument("--output-base-dir", type=Path, default=Config.OUTPUT_DIR, help="Diretório base onde as sessões de saída serão criadas.")
-    parser.add_argument('--cleanup-policy', type=str, default='final_dataset', choices=['final_dataset', 'intermediate', 'all_except_raw_data', 'none'], help="Política de limpeza a ser aplicada no final.")
     parser.add_argument('--use-cuda', action=argparse.BooleanOptionalAction, default=False, help="Habilita o uso de GPU (CUDA) se disponível.")
 
     # --- Parsing dos Argumentos ---
@@ -93,7 +92,6 @@ def main():
     logger.info("🚀 Iniciando a Pipeline de Processamento de Áudio Local...")
     logger.info(f"Diretório de Entrada: {args.input_directory}")
     logger.info(f"Diretório Base de Saída: {args.output_base_dir}")
-    logger.info(f"Política de Cleanup: {args.cleanup_policy}")
     logger.info(f"Usar CUDA: {args.use_cuda}")
 
 
