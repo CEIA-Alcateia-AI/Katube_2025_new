@@ -144,8 +144,43 @@ class AudioProcessingPipeline:
         logger.info(f"📁 Session local criada: {self.current_session}")
         logger.info(f"Created session: {self.current_session}")
         return self.session_dir
+    
 
 
+    def _save_timestamps_metadata(self, metadata: Dict[str, Any], update: bool = False):
+            """
+            Save or update timestamps metadata to JSON file.
+            
+            Args:
+                metadata: Metadata dictionary to save
+                update: If True, update existing file; if False, create new
+            """
+            if not self.session_dir:
+                logger.error("Session directory not initialized")
+                return
+            
+            # JSON file location: {session_dir}/segments/segments_timestamps.json
+            json_path = self.session_dir / 'segments' / 'segments_timestamps.json'
+            
+            if update and json_path.exists():
+                # Load existing data
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        existing_data = json.load(f)
+                    
+                    # Deep merge metadata
+                    existing_data.update(metadata)
+                    metadata = existing_data
+                except Exception as e:
+                    logger.warning(f"Failed to load existing metadata: {e}")
+            
+            # Save metadata
+            try:
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(metadata, f, indent=2, ensure_ascii=False)
+                logger.info(f"Timestamps metadata saved to: {json_path}")
+            except Exception as e:
+                logger.error(f"Failed to save timestamps metadata: {e}")
     def cleanup(self, stages_to_clean: Optional[List[str]] = None):
         for stage in stages_to_clean:
             logger.info(f'\n\n\n ==== Limpando a pasta {stage} ===')
@@ -158,7 +193,7 @@ class AudioProcessingPipeline:
                 except Exception as e:
                     logger.error(f"❌ Falha ao deletar o diretório de downloads: {e}")
     
-    def segment_audio(self, audio_path: Path, use_intelligent_segmentation: bool = True) -> List[Path]:
+    def segment_audio(self, audio_path: Path, use_intelligent_segmentation: bool = True) -> List[Tuple[Path, float, float]]:
         """
         Step 2: Segment audio into manageable chunks for local processing.
         
@@ -167,24 +202,72 @@ class AudioProcessingPipeline:
             use_intelligent_segmentation: Use intelligent segmentation vs simple chunking
             
         Returns:
-            List of segment file paths
+            List of tuples (segment_path, absolute_start_time, absolute_end_time)
         """
         logger.info("=== STEP 2: SEGMENTING AUDIO ===")
         
         segments_dir = self.session_dir / 'segments'
         
         if use_intelligent_segmentation:
-            # Use intelligent segmentation with VAD for quality cuts
-            segments = self.segmenter.segment_audio(audio_path, segments_dir)
+            # Use intelligent segmentation with VAD for quality cuts - returns timestamps
+            segments_with_timestamps = self.segmenter.segment_audio(audio_path, segments_dir)
         else:
             # Simple time-based segmentation fallback
-            segments = self._simple_segment_audio(audio_path, segments_dir)
+            segments_with_timestamps = self._simple_segment_audio(audio_path, segments_dir)
         
-        logger.info(f"Created {len(segments)} segments")
+        logger.info(f"Created {len(segments_with_timestamps)} segments")
         
-        # Retornar segmentos brutos - os filtros serão aplicados no pipeline principal
-        return segments
-    
+        # Save timestamps metadata to JSON
+        self._save_segmentation_metadata(audio_path, segments_with_timestamps)
+        
+        return segments_with_timestamps
+
+
+    def _save_segmentation_metadata(self, audio_path: Path, segments_with_timestamps: List[Tuple[Path, float, float]]):
+        """
+        Save segmentation metadata with absolute timestamps to JSON.
+        
+        Args:
+            audio_path: Path to original audio file
+            segments_with_timestamps: List of (segment_path, start_time, end_time) tuples
+        """
+        import soundfile as sf
+        
+        # Get audio duration
+        try:
+            audio_info = sf.info(audio_path)
+            total_duration = audio_info.duration
+        except Exception as e:
+            logger.warning(f"Could not get audio duration: {e}")
+            total_duration = 0.0
+        
+        # Build metadata structure
+        metadata = {
+            "original_audio": {
+                "path": str(audio_path),
+                "duration": total_duration
+            },
+            "segments": {}
+        }
+        
+        # Add each segment info
+        for segment_path, start_time, end_time in segments_with_timestamps:
+            segment_id = segment_path.stem  # e.g., "segment_000"
+            
+            metadata["segments"][segment_id] = {
+                "file_path": str(segment_path),
+                "absolute_start": start_time,
+                "absolute_end": end_time,
+                "duration": end_time - start_time,
+                "speakers": {}  # Will be populated after diarization
+            }
+        
+        # Save to JSON
+        self._save_timestamps_metadata(metadata, update=False)
+        logger.info(f"Saved segmentation metadata for {len(segments_with_timestamps)} segments")
+
+
+
     def apply_mos_filter(self, segment_paths: List[Path], rejected_dir: Optional[Path] = None) -> Dict[str, Any]:
         """
         Apply MOS quality filter to audio segments.
@@ -372,9 +455,10 @@ class AudioProcessingPipeline:
         
         return clean_segments, overlapping_segments
     
+    
     def separate_speakers(self, diarization_results: Dict[str, Any], enhance_audio: bool = True) -> Dict[str, Any]:
         """
-        Step 5: Separate audio by speakers based on diarization results.
+        Step 5: Separate audio by speakers using diarization results.
         
         Args:
             diarization_results: Results from diarization step
@@ -388,6 +472,16 @@ class AudioProcessingPipeline:
         speakers_dir = self.session_dir / 'speakers'
         separation_results = {}
         
+        # Load timestamps metadata
+        json_path = self.session_dir / 'segments' / 'segments_timestamps.json'
+        timestamps_metadata = {}
+        if json_path.exists():
+            try:
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    timestamps_metadata = json.load(f)
+            except Exception as e:
+                logger.warning(f"Could not load timestamps metadata: {e}")
+        
         for audio_path_str, diar_result in diarization_results.items():
             if 'error' in diar_result:
                 continue
@@ -400,16 +494,28 @@ class AudioProcessingPipeline:
                     logger.warning(f"No RTTM file for {audio_path.name}")
                     continue
                 
-                # Process with speaker separator
+                # Get segment offset from metadata
+                segment_id = audio_path.stem
+                segment_offset = 0.0
+                
+                if 'segments' in timestamps_metadata and segment_id in timestamps_metadata['segments']:
+                    segment_offset = timestamps_metadata['segments'][segment_id].get('absolute_start', 0.0)
+                    logger.info(f"Segment {segment_id} offset: {segment_offset:.2f}s")
+                
+                # Process with speaker separator (with offset)
                 result = self.speaker_separator.process_audio_file(
                     audio_path, 
                     rttm_path, 
                     speakers_dir / audio_path.stem,
                     enhance=enhance_audio,
-                    create_compilations=True
+                    create_compilations=True,
+                    segment_offset=segment_offset
                 )
                 
                 separation_results[audio_path_str] = result
+                
+                # Update metadata with speaker information
+                self._update_metadata_with_speakers(segment_id, result, rttm_path)
                 
             except Exception as e:
                 logger.error(f"Speaker separation failed for {audio_path_str}: {e}")
@@ -423,6 +529,84 @@ class AudioProcessingPipeline:
         
         return separation_results
     
+    def _update_metadata_with_speakers(self, segment_id: str, separation_result: Dict[str, Any], rttm_path: Path):
+        """
+        Update timestamps metadata with speaker information after diarization.
+        
+        Args:
+            segment_id: Segment identifier (e.g., "segment_000")
+            separation_result: Result from speaker_separator.process_audio_file()
+            rttm_path: Path to RTTM file with diarization data
+        """
+        import pandas as pd
+        
+        # Load existing metadata
+        json_path = self.session_dir / 'segments' / 'segments_timestamps.json'
+        if not json_path.exists():
+            logger.warning("Timestamps metadata file not found")
+            return
+        
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load metadata: {e}")
+            return
+        
+        # Get segment offset
+        segment_offset = 0.0
+        if 'segments' in metadata and segment_id in metadata['segments']:
+            segment_offset = metadata['segments'][segment_id].get('absolute_start', 0.0)
+        else:
+            logger.warning(f"Segment {segment_id} not found in metadata")
+            return
+        
+        # Load RTTM to get speaker timestamps
+        try:
+            speaker_data = self.speaker_separator.load_diarization_dataframe(rttm_path)
+            if speaker_data.empty:
+                logger.warning(f"No speaker data in RTTM: {rttm_path}")
+                return
+            
+            # Merge consecutive segments
+            merged_data = self.speaker_separator.merge_consecutive_segments(speaker_data)
+            
+        except Exception as e:
+            logger.error(f"Failed to load RTTM data: {e}")
+            return
+        
+        # Build speaker information
+        speakers_info = {}
+        
+        for speaker in merged_data['SPEAKER'].unique():
+            speaker_segments = merged_data[merged_data['SPEAKER'] == speaker]
+            
+            segments_list = []
+            for idx, row in speaker_segments.iterrows():
+                relative_start = row['START']
+                relative_end = row['END']
+                
+                segments_list.append({
+                    "relative_start": relative_start,
+                    "relative_end": relative_end,
+                    "absolute_start": segment_offset + relative_start,
+                    "absolute_end": segment_offset + relative_end,
+                    "duration": relative_end - relative_start
+                })
+            
+            speakers_info[speaker] = segments_list
+        
+        # Update metadata
+        metadata['segments'][segment_id]['speakers'] = speakers_info
+        
+        # Save updated metadata
+        try:
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            logger.info(f"Updated metadata with {len(speakers_info)} speakers for segment {segment_id}")
+        except Exception as e:
+            logger.error(f"Failed to save updated metadata: {e}")
+
     def prepare_for_stt(self, separation_results: Dict[str, Any]) -> Dict[str, List[Path]]:
         """
         Step 6: Prepare final audio files for STT processing.
@@ -675,7 +859,10 @@ class AudioProcessingPipeline:
             session_dir = self.create_session(session_name_resolved)
             
             # Step 1: Segment
-            segments = self.segment_audio(source_audio_path, use_intelligent_segmentation)
+            segments_with_timestamps = self.segment_audio(source_audio_path, use_intelligent_segmentation)
+            
+            # Extract paths for processing (filters expect List[Path])
+            segments = [seg_path for seg_path, _, _ in segments_with_timestamps]
             
             # Step 2: Apply completeness filter (DISABLED - moved to separate file)
             # Completeness filter is now in src/audio_completeness_filter.py
@@ -683,7 +870,7 @@ class AudioProcessingPipeline:
             #     completeness_rejected_dir = session_dir / 'audio_descartado_completude'
             #     completeness_result = self.apply_completeness_filter(segments, rejected_dir=completeness_rejected_dir)
             #     segments = completeness_result['complete_segments']
-            #     logger.info(f"✅ Completeness filter: {len(segments)} segments passed (filtered {completeness_result['cut_count']} cut segments)")
+            #     logger.info(f"Completeness filter: {len(segments)} segments passed (filtered {completeness_result['cut_count']} cut segments)")
             
             # Step 3: Apply MOS filter
             if self.enable_mos_filter:
@@ -691,9 +878,9 @@ class AudioProcessingPipeline:
                     mos_rejected_dir = session_dir / 'audio_descartado_mos'
                     mos_result = self.apply_mos_filter(segments, rejected_dir=mos_rejected_dir)
                     segments = mos_result['filtered_segments']
-                    logger.info(f"✅ MOS filter: {len(segments)} segments passed")
+                    logger.info(f"MOS filter: {len(segments)} segments passed")
                 except Exception as e:
-                    logger.error(f"❌ MOS filter failed: {e}")
+                    logger.error(f"MOS filter failed: {e}")
                     return {'success': False, 'error': f"MOS filter failed: {str(e)}"}
             
             # Step 4: Diarization (ANTES do STT)

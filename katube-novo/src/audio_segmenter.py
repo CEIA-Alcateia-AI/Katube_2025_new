@@ -343,7 +343,8 @@ class AudioSegmenter:
         
         return sorted(good_cut_points)
     
-    def segment_audio(self, audio_path: Path, output_dir: Path) -> List[Path]:
+    
+    def segment_audio(self, audio_path: Path, output_dir: Path) -> List[Tuple[Path, float, float]]:
         """
         Segment audio file intelligently based on speech patterns.
         
@@ -352,7 +353,7 @@ class AudioSegmenter:
             output_dir: Directory to save segments
             
         Returns:
-            List of paths to segmented audio files
+            List of tuples (segment_path, absolute_start_time, absolute_end_time)
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -369,7 +370,7 @@ class AudioSegmenter:
         logger.info(f"Found {len(cut_points) - 1} potential segments")
         
         # Initialize variables
-        segment_paths = []
+        segments_with_timestamps = []
         segment_idx = 0
         
         # Process segments based on intelligent cut points
@@ -407,9 +408,14 @@ class AudioSegmenter:
                         segment_path = output_dir / filename
                         
                         sf.write(segment_path, chunk_audio, self.sample_rate)
-                        segment_paths.append(segment_path)
                         
-                        logger.debug(f"Segment {segment_idx} chunk {chunk_idx}: {chunk_duration_actual:.2f}s -> {segment_path}")
+                        # Calculate absolute timestamps
+                        absolute_start = chunk_start / self.sample_rate
+                        absolute_end = chunk_end / self.sample_rate
+                        
+                        segments_with_timestamps.append((segment_path, absolute_start, absolute_end))
+                        
+                        logger.debug(f"Segment {segment_idx} chunk {chunk_idx}: {chunk_duration_actual:.2f}s ({absolute_start:.2f}s - {absolute_end:.2f}s) -> {segment_path}")
                         chunk_idx += 1
                     
                     chunk_start = chunk_end
@@ -428,14 +434,18 @@ class AudioSegmenter:
                 segment_path = output_dir / filename
                 
                 sf.write(segment_path, segment_audio, self.sample_rate)
-                segment_paths.append(segment_path)
                 
-                logger.debug(f"Segment {segment_idx}: {duration:.2f}s -> {segment_path}")
+                # Calculate absolute timestamps
+                absolute_start = start_sample / self.sample_rate
+                absolute_end = end_sample / self.sample_rate
+                
+                segments_with_timestamps.append((segment_path, absolute_start, absolute_end))
+                
+                logger.debug(f"Segment {segment_idx}: {duration:.2f}s ({absolute_start:.2f}s - {absolute_end:.2f}s) -> {segment_path}")
                 segment_idx += 1
         
-        logger.info(f"Created {len(segment_paths)} segments")
-        return segment_paths
-    
+        logger.info(f"Created {len(segments_with_timestamps)} segments with timestamps")
+        return segments_with_timestamps
     def segment_with_timestamps(self, audio_path: Path, output_dir: Path) -> List[Tuple[Path, float, float]]:
         """
         Segment audio and return with timestamps.

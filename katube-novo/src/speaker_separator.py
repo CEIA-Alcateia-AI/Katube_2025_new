@@ -141,8 +141,10 @@ class SpeakerSeparator:
             logger.warning(f"Audio enhancement failed: {e}")
             return audio
     
+    
+    
     def extract_speaker_segments(self, audio_path: Path, df: pd.DataFrame, output_dir: Path, 
-                                enhance: bool = True) -> Dict[str, List[Path]]:
+                                enhance: bool = True, segment_offset: float = 0.0) -> Dict[str, List[Path]]:
         """
         Extract audio segments for each speaker.
         
@@ -151,6 +153,7 @@ class SpeakerSeparator:
             df: DataFrame with speaker segments
             output_dir: Output directory
             enhance: Whether to apply audio enhancement
+            segment_offset: Absolute start time of this segment in the original audio (in seconds)
             
         Returns:
             Dictionary mapping speaker IDs to lists of segment file paths
@@ -183,10 +186,14 @@ class SpeakerSeparator:
         for idx, row in df.iterrows():
             try:
                 speaker = row['SPEAKER']
-                start_time = row['START']
-                end_time = row['END']
+                start_time = row['START']  # Relative to segment
+                end_time = row['END']      # Relative to segment
                 
-                # Convert to sample indices
+                # Calculate absolute timestamps
+                absolute_start = segment_offset + start_time
+                absolute_end = segment_offset + end_time
+                
+                # Convert to sample indices (relative to this segment)
                 start_sample = int(start_time * sr)
                 end_sample = int(end_time * sr)
                 
@@ -205,15 +212,15 @@ class SpeakerSeparator:
                 if enhance:
                     segment_audio = self.enhance_audio_segment(segment_audio)
                 
-                # Create filename
-                filename = f"{audio_name}_{speaker}_{start_time:.2f}_{end_time:.2f}.{Config.AUDIO_FORMAT}"
+                # Create filename with absolute timestamps
+                filename = f"{audio_name}_{speaker}_{absolute_start:.2f}_{absolute_end:.2f}.{Config.AUDIO_FORMAT}"
                 output_path = output_dir / f"speaker_{speaker}" / filename
                 
                 # Save segment
                 sf.write(output_path, segment_audio, sr)
                 speaker_files[speaker].append(output_path)
                 
-                logger.debug(f"Extracted {speaker}: {start_time:.2f}-{end_time:.2f}s -> {filename}")
+                logger.debug(f"Extracted {speaker}: relative={start_time:.2f}-{end_time:.2f}s, absolute={absolute_start:.2f}-{absolute_end:.2f}s -> {filename}")
                 
             except Exception as e:
                 logger.error(f"Failed to extract segment {idx}: {e}")
@@ -337,7 +344,8 @@ class SpeakerSeparator:
             logger.error(f"Failed to save compilation: {e}")
     
     def process_audio_file(self, audio_path: Path, rttm_path: Path, output_dir: Path, 
-                          enhance: bool = True, create_compilations: bool = True) -> Dict[str, any]:
+                          enhance: bool = True, create_compilations: bool = True,
+                          segment_offset: float = 0.0) -> Dict[str, any]:
         """
         Complete processing pipeline for a single audio file.
         
@@ -347,6 +355,7 @@ class SpeakerSeparator:
             output_dir: Output directory
             enhance: Apply audio enhancement
             create_compilations: Create speaker compilation files
+            segment_offset: Absolute start time of this segment in the original audio (in seconds)
             
         Returns:
             Dictionary with processing results
@@ -363,15 +372,16 @@ class SpeakerSeparator:
         if merged_df.empty:
             return {'error': 'No segments after merging'}
         
-        # Extract speaker segments
+        # Extract speaker segments with offset
         speaker_files = self.extract_speaker_segments(
-            audio_path, merged_df, output_dir, enhance
+            audio_path, merged_df, output_dir, enhance, segment_offset
         )
         
         results = {
             'speaker_files': speaker_files,
             'num_speakers': len(speaker_files),
-            'total_segments': sum(len(files) for files in speaker_files.values())
+            'total_segments': sum(len(files) for files in speaker_files.values()),
+            'segment_offset': segment_offset  # Include offset in results
         }
         
         # Create compilations if requested
