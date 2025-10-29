@@ -1,0 +1,1 @@
+python run_pipeline.py "/home/anjos/Dropbox/PROJETO CEIA/Alcateia/Katube_2025_new/katube-novo/audios/Ljudnb54r8I" --session-name teste_com_token --cleanup-policy none

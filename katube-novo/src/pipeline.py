@@ -1191,6 +1191,53 @@ class AudioProcessingPipeline:
             logger.error(f"Error in STT validation: {e}")
             return {"error": str(e)}
     
+
+    def _extract_timestamps_from_flac_name(self, flac_filename: str) -> Dict[str, Any]:
+        """
+        Extrai timestamps e informacoes do nome do arquivo FLAC.
+        
+        Args:
+            flac_filename: Nome do arquivo (ex: EhzSC3LWez4_segment_000_SPEAKER_00_1.43_24.41.flac)
+            
+        Returns:
+            Dictionary com segment_id, speaker, absolute_start, absolute_end, duration
+        """
+        try:
+            # Remover extensao
+            stem = flac_filename.replace('.flac', '')
+            
+            # Split por underscore
+            parts = stem.split('_')
+            
+            # Padrao esperado: {video_id}_{segment}_{num}_SPEAKER_{num}_{start}_{end}
+            # Ex: ['EhzSC3LWez4', 'segment', '000', 'SPEAKER', '00', '1.43', '24.41']
+            
+            if len(parts) < 7:
+                logger.warning(f"Nome de arquivo invalido (poucos parts): {flac_filename}")
+                return None
+            
+            # Extrair informacoes
+            video_id = parts[0]
+            segment_id = f"{parts[1]}_{parts[2]}"  # segment_000
+            speaker = f"{parts[3]}_{parts[4]}"      # SPEAKER_00
+            absolute_start = float(parts[-2])       # Penultimo elemento
+            absolute_end = float(parts[-1])         # Ultimo elemento
+            duration = absolute_end - absolute_start
+            
+            return {
+                'video_id': video_id,
+                'segment_id': segment_id,
+                'speaker': speaker,
+                'absolute_start': absolute_start,
+                'absolute_end': absolute_end,
+                'duration': duration
+            }
+            
+        except Exception as e:
+            logger.error(f"Erro ao extrair timestamps de {flac_filename}: {e}")
+            return None
+
+
     def filter_and_denoise_segments(self, 
                                    validation_json_path: str,
                                    output_dir: Path,
@@ -1237,6 +1284,8 @@ class AudioProcessingPipeline:
                 logger.error(error_msg)
                 return {"success": False, "error": error_msg}
             
+         
+
             logger.info(f"Processing {len(normalized_pairs)} segments for video: {video_id}")
             
             # Criar pasta de saida (todos os aprovados ficam aqui)
@@ -1367,6 +1416,10 @@ class AudioProcessingPipeline:
                         logger.info(f"  Copied original to audios_denoiser/")
                 
                 # Adicionar ao JSON final (TODOS os segmentos, aprovados e rejeitados)
+                # Extrair timestamps do nome do arquivo FLAC
+                timestamps_info = self._extract_timestamps_from_flac_name(flac_file) if flac_file else None
+                
+                # Adicionar ao JSON final (TODOS os segmentos, aprovados e rejeitados)
                 final_json["segments"][segment_id] = {
                     "txt_whisper": pair_data.get('txt_whisper'),
                     "txt_wav2vec2": pair_data.get('txt_wav2vec2'),
@@ -1380,6 +1433,14 @@ class AudioProcessingPipeline:
                     "utilizou_denoiser": utilizou_denoiser,
                     "status": status
                 }
+                
+                # Adicionar timestamps se disponiveis
+                if timestamps_info:
+                    final_json["segments"][segment_id]["absolute_start"] = timestamps_info['absolute_start']
+                    final_json["segments"][segment_id]["absolute_end"] = timestamps_info['absolute_end']
+                    final_json["segments"][segment_id]["duration"] = timestamps_info['duration']
+                    final_json["segments"][segment_id]["speaker"] = timestamps_info['speaker']
+                    final_json["segments"][segment_id]["original_segment"] = timestamps_info['segment_id']
             
             # Calcular estatisticas finais
             approved_total = approved_with_denoise + approved_without_denoise
