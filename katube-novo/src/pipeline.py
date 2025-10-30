@@ -306,9 +306,9 @@ class AudioProcessingPipeline:
             output_dir=self.session_dir,
             video_id=video_id
         )
-        # For pipeline continuation, use approved segments (≥3.0)
-        accepted_segments = approved_segments
-        
+        # For pipeline continuation, use approved + intermediate segments (â‰¥2.5)
+        # Intermediate segments will go through denoising
+        accepted_segments = approved_segments + intermediate_segments
         # Generate quality report
         quality_report = self.mos_filter.get_quality_report(segment_paths)
         logger.info(f"📊 MOS Quality Report: {quality_report}")
@@ -361,12 +361,13 @@ class AudioProcessingPipeline:
             video_id = first_segment.split('_segment_')[0] if '_segment_' in first_segment else None
 
         approved_segments, intermediate_segments, rejected_segments = self.mos_filter.filter_audio_segments(
-            segment_paths,
+            segment_paths, 
             output_dir=self.session_dir,
             video_id=video_id
         )
-        # For pipeline continuation, use approved segments (≥3.0)
-        accepted_segments = approved_segments
+        # For pipeline continuation, use approved + intermediate segments (â‰¥2.5)
+        # Intermediate segments will go through denoising
+        accepted_segments = approved_segments + intermediate_segments
         
         # Generate quality report
         quality_report = self.mos_filter.get_quality_report(segment_paths)
@@ -1111,8 +1112,16 @@ class AudioProcessingPipeline:
             logger.info(f"Processing time: {processing_time:.2f}s")
             logger.info(f"Results saved to: {results_file}")
             
-            logger.info("===\n\n\n LIMPEZA DE DIRETÓRIOS INTERMEDIÁRIOS ===")
-            #self.cleanup(stages_to_clean=["downloads", "audio_rejeitado_validacao","segments", "stt_ready","stt_results\STT-wav2vec2", "stt_results\STT-whisper", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
+            logger.info("=== LIMPEZA: REMOVENDO PASTA DE SESSAO ===")
+            try:
+                if session_dir.exists():
+                    shutil.rmtree(session_dir)
+                    logger.info(f"Pasta de sessao removida com sucesso: {session_dir}")
+                else:
+                    logger.warning(f"Pasta de sessao nao encontrada: {session_dir}")
+            except Exception as e:
+                logger.error(f"Erro ao remover pasta de sessao: {e}")
+                logger.warning("Continuando mesmo com falha na limpeza...")
 
             return results
             
