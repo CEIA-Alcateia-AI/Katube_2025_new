@@ -9,6 +9,7 @@ import logging
 import json
 from datetime import datetime
 import shutil
+import csv
 
 from config import Config
 from audio_segmenter import AudioSegmenter
@@ -798,7 +799,139 @@ class AudioProcessingPipeline:
                                     logger.info(f"Sox normalization completed:")
                                     logger.info(f"   - Normalized: {sox_result.get('success_count', 0)}/{sox_result.get('total_files', 0)}")
                                     logger.info(f"   - Output: {sox_result.get('output_dir')}")
+
+                                # Step 11: Criar/atualizar dataset.csv
+                                    try:
+                                        # Caminho base do dataset (assumindo estrutura katube-novo/dataset)
+                                        project_root = Path(__file__).parent.parent
+                                        dataset_base = project_root / 'dataset'
+                                        
+                                        # Criar pasta dataset se nao existir
+                                        dataset_base.mkdir(parents=True, exist_ok=True)
+                                        
+                                        # Caminho do JSON final
+                                        final_json_path = Path(filter_result.get('final_json_path'))
+                                        
+                                        logger.info("Iniciando criacao/atualizacao do dataset.csv...")
+                                        
+                                        csv_result = self.create_or_update_dataset_csv(
+                                            final_json_path=final_json_path,
+                                            video_id=video_id,
+                                            audio_dataset_base=dataset_base
+                                        )
+                                        
+                                        combined_results['dataset_csv'] = csv_result
+                                        
+                                        if csv_result.get('success'):
+                                            logger.info(f"Dataset CSV atualizado:")
+                                            logger.info(f"   - Segmentos adicionados: {csv_result.get('approved_count', 0)}")
+                                            logger.info(f"   - Arquivo: {csv_result.get('csv_path')}")
+                                            logger.info("Copiando JSON final para historico...")
+                                            
+                                            historico_dir = dataset_base / 'historico_dataset'
+                                            historico_dir.mkdir(parents=True, exist_ok=True)
+                                            
+                                            # Caminho de destino: apenas {video_id}.json
+                                            json_dest = historico_dir / f"{video_id}.json"
+                                            
+                                            # Validar existencia do JSON origem
+                                            if not final_json_path.exists():
+                                                error_msg = f"ERRO CRITICO: JSON final nao encontrado para copiar: {final_json_path}"
+                                                logger.error(error_msg)
+                                                raise FileNotFoundError(error_msg)
+                                            
+                                            # Se destino ja existe, gerar nome com sufixo
+                                            if json_dest.exists():
+                                                counter = 2
+                                                while json_dest.exists():
+                                                    json_dest = historico_dir / f"{video_id}_v{counter}.json"
+                                                    counter += 1
+                                                logger.warning(f"JSON ja existe, salvando como: {json_dest.name}")
+                                            
+                                            # Copiar JSON
+                                            shutil.copy2(final_json_path, json_dest)
+                                            logger.info(f"JSON copiado para historico: {json_dest}")
+                                            
+                                            # Adicionar info ao resultado
+                                            csv_result['historico_json'] = str(json_dest)
+
+
+                                        else:
+                                            logger.error(f"Falha ao atualizar dataset CSV: {csv_result.get('error')}")
+                                            
+                                    except Exception as e:
+                                        logger.error(f"ERRO CRITICO ao criar dataset CSV: {e}")
+                                        import traceback
+                                        logger.error(traceback.format_exc())
+                                        combined_results['dataset_csv'] = {"error": str(e)}
+
+
                                 else:
+                                    # Step 11: Criar/atualizar dataset.csv
+                                    try:
+                                        # Caminho base do dataset (assumindo estrutura katube-novo/dataset)
+                                        project_root = Path(__file__).parent.parent
+                                        dataset_base = project_root / 'dataset'
+                                        
+                                        # Criar pasta dataset se nao existir
+                                        dataset_base.mkdir(parents=True, exist_ok=True)
+                                        
+                                        # Caminho do JSON final
+                                        final_json_path = Path(filter_result.get('final_json_path'))
+                                        
+                                        logger.info("Iniciando criacao/atualizacao do dataset.csv...")
+                                        
+                                        csv_result = self.create_or_update_dataset_csv(
+                                            final_json_path=final_json_path,
+                                            video_id=video_id,
+                                            audio_dataset_base=dataset_base
+                                        )
+                                        
+                                        combined_results['dataset_csv'] = csv_result
+                                        
+                                        if csv_result.get('success'):
+                                            logger.info(f"Dataset CSV atualizado:")
+                                            logger.info(f"   - Segmentos adicionados: {csv_result.get('approved_count', 0)}")
+                                            logger.info(f"   - Arquivo: {csv_result.get('csv_path')}")
+                                            logger.info("Copiando JSON final para historico...")
+                                            
+                                            historico_dir = dataset_base / 'historico_dataset'
+                                            historico_dir.mkdir(parents=True, exist_ok=True)
+                                            
+                                            # Caminho de destino: apenas {video_id}.json
+                                            json_dest = historico_dir / f"{video_id}.json"
+                                            
+                                            # Validar existencia do JSON origem
+                                            if not final_json_path.exists():
+                                                error_msg = f"ERRO CRITICO: JSON final nao encontrado para copiar: {final_json_path}"
+                                                logger.error(error_msg)
+                                                raise FileNotFoundError(error_msg)
+                                            
+                                            # Se destino ja existe, gerar nome com sufixo
+                                            if json_dest.exists():
+                                                counter = 2
+                                                while json_dest.exists():
+                                                    json_dest = historico_dir / f"{video_id}_v{counter}.json"
+                                                    counter += 1
+                                                logger.warning(f"JSON ja existe, salvando como: {json_dest.name}")
+                                            
+                                            # Copiar JSON
+                                            shutil.copy2(final_json_path, json_dest)
+                                            logger.info(f"JSON copiado para historico: {json_dest}")
+                                            
+                                            # Adicionar info ao resultado
+                                            csv_result['historico_json'] = str(json_dest)
+
+
+                                        else:
+                                            logger.error(f"Falha ao atualizar dataset CSV: {csv_result.get('error')}")
+                                            
+                                    except Exception as e:
+                                        logger.error(f"ERRO CRITICO ao criar dataset CSV: {e}")
+                                        import traceback
+                                        logger.error(traceback.format_exc())
+                                        combined_results['dataset_csv'] = {"error": str(e)}
+                                        # Nao abortar pipeline, apenas registrar erro
                                     logger.warning(f"Sox normalization failed: {sox_result.get('error')}")
                                     
                             except Exception as e:
@@ -1014,6 +1147,8 @@ class AudioProcessingPipeline:
         
         return segments
     
+    # COLAR AQUI 1
+
     def _generate_statistics(self, stt_files: Dict[str, List[Path]], 
                            separation_results: Dict[str, Any]) -> Dict[str, Any]:
         """Generate processing statistics."""
@@ -1508,7 +1643,8 @@ class AudioProcessingPipeline:
         
         try:
             # Caminho base do dataset
-            dataset_base = Path("/home/anjos/Dropbox/PROJETO CEIA/Alcateia/Katube_2025_new/katube-novo/dataset/audio_dataset")
+            project_root = Path(__file__).parent.parent
+            dataset_base = project_root / 'dataset' / 'audio_dataset'
             output_dir = dataset_base / video_id
             output_dir.mkdir(parents=True, exist_ok=True)
             
@@ -1572,6 +1708,155 @@ class AudioProcessingPipeline:
             import traceback
             logger.error(traceback.format_exc())
             return {"success": False, "error": str(e)}
+    def create_or_update_dataset_csv(self, 
+                                     final_json_path: Path,
+                                     video_id: str,
+                                     audio_dataset_base: Path) -> Dict[str, Any]:
+        """
+        Cria ou atualiza o dataset.csv com informacoes dos segmentos aprovados.
+        Garante sincronizacao 100% entre CSV e audios armazenados.
+        
+        Args:
+            final_json_path: Caminho para o JSON final ({video_id}_final_audio_dataset.json)
+            video_id: ID do video do YouTube
+            audio_dataset_base: Caminho base para audio_dataset/ (ex: /path/to/katube-novo/dataset)
+            
+        Returns:
+            Dictionary com resultados da operacao
+        """
+        logger.info("=== STEP 11: CREATING/UPDATING DATASET.CSV ===")
+        
+        try:
+
+            # Validar JSON final
+            if not final_json_path.exists():
+                error_msg = f"JSON final nao encontrado: {final_json_path}"
+                logger.error(f"ERRO CRITICO: {error_msg}")
+                raise FileNotFoundError(error_msg)
+            
+            # Carregar JSON final
+            with open(final_json_path, 'r', encoding='utf-8') as f:
+                final_data = json.load(f)
+            
+            segments = final_data.get('segments', {})
+            
+            # Filtrar apenas segmentos aprovados
+            approved_segments = {
+                seg_id: seg_data 
+                for seg_id, seg_data in segments.items() 
+                if seg_data.get('status') == 'approved'
+            }
+            
+            if not approved_segments:
+                logger.warning("Nenhum segmento aprovado encontrado no JSON")
+                return {
+                    'success': True,
+                    'approved_count': 0,
+                    'message': 'Nenhum segmento aprovado para adicionar ao CSV'
+                }
+            
+            logger.info(f"Segmentos aprovados encontrados: {len(approved_segments)}")
+            
+            # Definir caminhos
+            csv_path = audio_dataset_base / 'dataset.csv'
+            audio_dir = audio_dataset_base / 'audio_dataset' / video_id
+            
+            # Validar que pasta de audios existe
+            if not audio_dir.exists():
+                error_msg = f"Pasta de audios nao encontrada: {audio_dir}"
+                logger.error(f"ERRO CRITICO: {error_msg}")
+                raise FileNotFoundError(error_msg)
+            
+            # Preparar linhas do CSV
+            csv_rows = []
+            
+            for segment_id, seg_data in approved_segments.items():
+                # Nome do arquivo (sem extensao)
+                arquivo_nome = segment_id
+                
+                # Caminho do audio (deve existir fisicamente)
+                audio_file = audio_dir / f"{segment_id}.flac"
+                
+                # VALIDACAO CRITICA: Audio deve existir
+                if not audio_file.exists():
+                    error_msg = f"ERRO CRITICO: Audio aprovado nao encontrado: {audio_file}"
+                    logger.error(error_msg)
+                    raise FileNotFoundError(error_msg)
+                
+                # Caminho relativo (a partir de dataset/)
+                caminho_relativo = f"audio_dataset/{video_id}/{segment_id}.flac"
+                
+                # Extrair dados do JSON
+                duration = seg_data.get('duration')
+                absolute_start = seg_data.get('absolute_start')
+                absolute_end = seg_data.get('absolute_end')
+                mos_score = seg_data.get('mos_score')
+                whisper_text = seg_data.get('whisper_original', '')
+                wav2vec2_text = seg_data.get('wav2vec2_original', '')
+                levenshtein_sim = seg_data.get('levenshtein_similarity')
+                utilizou_denoiser = seg_data.get('utilizou_denoiser')
+                
+                # Criar linha do CSV
+                csv_row = {
+                    'id': video_id,
+                    'arquivo_nome': arquivo_nome,
+                    'caminho': caminho_relativo,
+                    'tamanho_segmento': duration,
+                    'start_split': absolute_start,
+                    'end_split': absolute_end,
+                    'mos_score': mos_score,
+                    'whisper': whisper_text,
+                    'wav2vec2': wav2vec2_text,
+                    'levenshtein_similarity': levenshtein_sim,
+                    'utilizou_denoiser': utilizou_denoiser
+                }
+                
+                csv_rows.append(csv_row)
+                logger.info(f"Validado: {segment_id} - Audio existe em {audio_file}")
+            
+            # Verificar se CSV ja existe
+            csv_exists = csv_path.exists()
+            
+            # Escrever no CSV (criar ou append)
+            with open(csv_path, 'a' if csv_exists else 'w', newline='', encoding='utf-8') as f:
+                fieldnames = [
+                    'id', 'arquivo_nome', 'caminho', 'tamanho_segmento',
+                    'start_split', 'end_split', 'mos_score', 'whisper',
+                    'wav2vec2', 'levenshtein_similarity', 'utilizou_denoiser'
+                ]
+                
+                writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='|')
+
+                # Escrever header apenas se arquivo for novo
+                if not csv_exists:
+                    writer.writeheader()
+                    logger.info(f"CSV criado: {csv_path}")
+                else:
+                    logger.info(f"CSV existente, adicionando dados: {csv_path}")
+                
+                # Escrever linhas
+                writer.writerows(csv_rows)
+            
+            logger.info(f"Dataset CSV atualizado com sucesso!")
+            logger.info(f"  Total de segmentos adicionados: {len(csv_rows)}")
+            logger.info(f"  Arquivo CSV: {csv_path}")
+            
+            return {
+                'success': True,
+                'csv_path': str(csv_path),
+                'approved_count': len(csv_rows),
+                'video_id': video_id
+            }
+            
+        except FileNotFoundError as e:
+            logger.error(f"ERRO CRITICO: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Erro ao criar/atualizar dataset CSV: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
+
 
     def _extract_base_name_for_validation(self, filename: str) -> str:
         """
