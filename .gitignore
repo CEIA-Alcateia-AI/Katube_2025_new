@@ -1,2 +1,5 @@
 output.log
 output*.log
+*.env.save
+.env
+.env.*
