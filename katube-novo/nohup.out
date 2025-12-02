@@ -1,0 +1,3 @@
+usage: batch_processor.py [-h] [--input-dir INPUT_DIR] [--log-dir LOG_DIR]
+                          [--historico-dir HISTORICO_DIR] [--dry-run]
+batch_processor.py: error: unrecognized arguments: output.log

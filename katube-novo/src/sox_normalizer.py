@@ -43,48 +43,54 @@ class SoxNormalizer:
         
     def _check_sox(self):
         """Check if Sox is available in the system."""
-        # Try to find Sox executable in common locations
-
-
-    # Tenta encontrar Sox no PATH primeiro (funciona em Linux e Windows)
-    sox_executable = shutil.which('sox')
-
-    if not sox_executable and platform.system() == 'Windows':
-        # Se não encontrou no PATH e está no Windows, tenta locais comuns
-        windows_paths = [
-            Path('C:/Program Files/Chris Bagwell/SoX/sox.exe'),
-            Path('C:/Program Files (x86)/Chris Bagwell/SoX/sox.exe'),
-            Path(os.getenv('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Packages' / 'ChrisBagwell.SoX_Microsoft.Winget.Source_8wekyb3d8bbwe' / 'sox-14.4.2' / 'sox.exe',
-        ]
+        # Tenta encontrar Sox no PATH primeiro (funciona em Linux e Windows)
+        sox_executable = shutil.which('sox')
         
-        for path in windows_paths:
-            if path.exists():
-                sox_executable = str(path)
-                break
+        if not sox_executable and platform.system() == 'Windows':
+            # Se não encontrou no PATH e está no Windows, tenta locais comuns
+            windows_paths = [
+                Path('C:/Program Files/Chris Bagwell/SoX/sox.exe'),
+                Path('C:/Program Files (x86)/Chris Bagwell/SoX/sox.exe'),
+                Path(os.getenv('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Packages' / 'ChrisBagwell.SoX_Microsoft.Winget.Source_8wekyb3d8bbwe' / 'sox-14.4.2' / 'sox.exe',
+            ]
+            
+            for path in windows_paths:
+                if path.exists():
+                    sox_executable = str(path)
+                    break
         
-        sox_found = False
-        sox_executable = None
-        
-        for sox_path in sox_paths:
+        # Se ainda não encontrou, verifica se sox está instalado
+        if not sox_executable:
             try:
                 result = subprocess.run(
-                    [sox_path, '--version'], 
+                    ['sox', '--version'], 
                     capture_output=True, 
                     text=True, 
                     timeout=10
                 )
                 if result.returncode == 0:
-                    sox_found = True
-                    sox_executable = sox_path
-                    logger.info(f"✅ Sox found at: {sox_path}")
-                    break
+                    sox_executable = 'sox'
             except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
-                continue
+                pass
         
-        if not sox_found:
-            raise RuntimeError("❌ Sox not found. Please install Sox: https://sox.sourceforge.net/")
-            
-        self.sox_executable = sox_executable
+        if not sox_executable:
+            raise RuntimeError("Sox not found. Please install Sox: https://sox.sourceforge.net/")
+        
+        # Verificar se o executável funciona
+        try:
+            result = subprocess.run(
+                [sox_executable, '--version'], 
+                capture_output=True, 
+                text=True, 
+                timeout=10
+            )
+            if result.returncode == 0:
+                logger.info(f"Sox found at: {sox_executable}")
+                self.sox_executable = sox_executable
+            else:
+                raise RuntimeError("Sox executable found but not working properly")
+        except Exception as e:
+            raise RuntimeError(f"Sox verification failed: {e}")
     
     def normalize_audio(self, input_path: Path, output_path: Optional[Path] = None) -> Dict[str, Any]:
         """

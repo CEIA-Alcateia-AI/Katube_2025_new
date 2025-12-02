@@ -1103,7 +1103,7 @@ class AudioProcessingPipeline:
             
             # Save results to JSON
             results_file = session_dir / 'pipeline_results.json'
-            with open(results_file, 'w') as f:
+            with open(results_file, 'w', encoding='utf-8') as f:
                 # Convert Path objects to strings for JSON serialization
                 json_results = self._prepare_for_json(results)
                 json.dump(json_results, f, indent=2, ensure_ascii=False)
