@@ -11,8 +11,8 @@ load_dotenv()
 class Config:
     # Audio settings
     SAMPLE_RATE = int(os.getenv('SAMPLE_RATE', '24000'))
-    SEGMENT_MIN_DURATION = float(os.getenv('SEGMENT_MIN_DURATION', '10.0'))
-    SEGMENT_MAX_DURATION = float(os.getenv('SEGMENT_MAX_DURATION', '15.0'))
+    SEGMENT_MIN_DURATION = float(os.getenv('SEGMENT_MIN_DURATION', '4.0'))
+    SEGMENT_MAX_DURATION = float(os.getenv('SEGMENT_MAX_DURATION', '18.0'))
     SEGMENT_OVERLAP = float(os.getenv('SEGMENT_OVERLAP', '0.5'))
     
     # Diarization settings

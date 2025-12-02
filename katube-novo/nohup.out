@@ -1,3 +1,10 @@
+python: can't open file '/home/ubuntu/katube_2025_new_cont/katube-novo/batch_processo.py': [Errno 2] No such file or directory
+usage: batch_processor.py [-h] [--input-dir INPUT_DIR] [--log-dir LOG_DIR]
+                          [--historico-dir HISTORICO_DIR] [--dry-run]
+batch_processor.py: error: unrecognized arguments: output.log
+usage: batch_processor.py [-h] [--input-dir INPUT_DIR] [--log-dir LOG_DIR]
+                          [--historico-dir HISTORICO_DIR] [--dry-run]
+batch_processor.py: error: unrecognized arguments: output.log
 usage: batch_processor.py [-h] [--input-dir INPUT_DIR] [--log-dir LOG_DIR]
                           [--historico-dir HISTORICO_DIR] [--dry-run]
 batch_processor.py: error: unrecognized arguments: output.log

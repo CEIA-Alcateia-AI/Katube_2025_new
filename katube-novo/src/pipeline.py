@@ -39,11 +39,11 @@ class AudioProcessingPipeline:
     def __init__(self, 
                  output_base_dir: Optional[Path] = None,
                  huggingface_token: Optional[str] = None,
-                 segment_min_duration: float = 10.0,
-                 segment_max_duration: float = 15.0,
+                 segment_min_duration: float = 4.0,
+                 segment_max_duration: float = 18.0,
                  mos_threshold: float = 2.5,
                  enable_mos_filter: bool = True,
-                 use_cuda: bool = False):
+                 use_cuda: bool = True):
         
         # Set up directories
         self.output_base_dir = output_base_dir or Config.OUTPUT_DIR

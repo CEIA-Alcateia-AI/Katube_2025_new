@@ -21,7 +21,7 @@ class WhisperSTTTranscriber:
     
     def __init__(self, 
                  whisper_model_name: str = "freds0/distil-whisper-large-v3-ptbr",
-                 device: str = "cpu",
+                 device: str = None,
                  huggingface_token: Optional[str] = None):
         """
         Initialize Whisper STT transcriber.
@@ -31,7 +31,12 @@ class WhisperSTTTranscriber:
             device: Device to run Whisper on ('cpu' or 'cuda')
             huggingface_token: HuggingFace token for authentication
         """
-        self.device = device
+        # Auto-detect device if not specified
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+        
         self.whisper_model_name = whisper_model_name
         self.huggingface_token = huggingface_token
         
@@ -45,19 +50,20 @@ class WhisperSTTTranscriber:
     def _load_models(self):
         """Load Whisper model."""
         try:
-            # Load Whisper model
             logger.info(f"Loading Whisper model: {self.whisper_model_name}")
             self.whisper_processor = WhisperProcessor.from_pretrained(
                 self.whisper_model_name,
                 token=self.huggingface_token
             )
+            
+            # 🔥 FIX: SEMPRE usar float32 para evitar conflitos de mixed precision
             self.whisper_model = WhisperForConditionalGeneration.from_pretrained(
                 self.whisper_model_name,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                torch_dtype=torch.float32,  # ✅ SEMPRE float32
                 token=self.huggingface_token
             )
             self.whisper_model.to(self.device)
-            logger.info("✅ Whisper model loaded successfully")
+            logger.info("✅ Whisper model loaded successfully (float32)")
                 
         except Exception as e:
             logger.error(f"❌ Error loading Whisper STT model: {e}")

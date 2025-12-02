@@ -76,8 +76,8 @@ def process_youtube_url_background(job_id: str, audio_path: Path, options: dict)
         pipeline = AudioProcessingPipeline(
             output_base_dir=Config.OUTPUT_DIR,
             huggingface_token=os.getenv('HUGGINGFACE_TOKEN'),
-            segment_min_duration=options.get('min_duration', 10.0),
-            segment_max_duration=options.get('max_duration', 15.0)
+            segment_min_duration=options.get('min_duration', 4.0),
+            segment_max_duration=options.get('max_duration', 18.0)
         )
         job.update("downloading", 10, "Baixando áudio do YouTube...")
 
@@ -197,8 +197,8 @@ def process():
         options = {
             'filename': data.get('filename'),
             'num_speakers': data.get('num_speakers'),
-            'min_duration': data.get('min_duration', 10.0),
-            'max_duration': data.get('max_duration', 15.0),
+            'min_duration': data.get('min_duration', 4.0),
+            'max_duration': data.get('max_duration', 18.0),
             'enhance_audio': data.get('enhance_audio', True),
             'intelligent_segmentation': data.get('intelligent_segmentation', True),
             'session_name': data.get('session_name')

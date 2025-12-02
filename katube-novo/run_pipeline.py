@@ -69,13 +69,13 @@ def main():
         help="Usa segmentação inteligente baseada em VAD (padrão: habilitado)."
     )
     # Adicione outros argumentos opcionais conforme necessário (min_duration, max_duration, mos_threshold, etc.)
-    parser.add_argument("--min-duration", type=float, default=10.0, help="Duração mínima do segmento (s).")
+    parser.add_argument("--min-duration", type=float, default=4.0, help="Duração mínima do segmento (s).")
     parser.add_argument("--max-duration", type=float, default=15.0, help="Duração máxima do segmento (s).")
     parser.add_argument("--mos-threshold", type=float, default=2.5, help="Limiar mínimo do filtro MOS.")
     parser.add_argument("--hf-token", type=str, default=os.getenv('HUGGINGFACE_TOKEN'), help="Token de acesso do Hugging Face (pode ser via variável de ambiente HUGGINGFACE_TOKEN).")
     parser.add_argument("--output-base-dir", type=Path, default=Config.OUTPUT_DIR, help="Diretório base onde as sessões de saída serão criadas.")
     parser.add_argument('--cleanup-policy', type=str, default='final_dataset', choices=['final_dataset', 'intermediate', 'all_except_raw_data', 'none'], help="Política de limpeza a ser aplicada no final.")
-    parser.add_argument('--use-cuda', action=argparse.BooleanOptionalAction, default=False, help="Habilita o uso de GPU (CUDA) se disponível.")
+    parser.add_argument('--use-cuda', action=argparse.BooleanOptionalAction, default=True, help="Habilita o uso de GPU (CUDA) se disponível.")
 
     # --- Parsing dos Argumentos ---
     args = parser.parse_args()

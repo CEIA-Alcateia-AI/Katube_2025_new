@@ -21,15 +21,20 @@ class WAV2VEC2STTTranscriber:
     
     def __init__(self, 
                  wav2vec2_model_name: str = "alefiury/wav2vec2-large-xlsr-53-coraa-brazilian-portuguese-gain-normalization",
-                 device: str = "cpu"):
+             device: str = None):
         """
         Initialize WAV2VEC2 STT transcriber.
         
         Args:
             wav2vec2_model_name: HuggingFace WAV2VEC2 model name
-            device: Device to run WAV2VEC2 on ('cpu' or 'cuda')
+            device: Device to run WAV2VEC2 on (None = auto-detect, 'cpu', or 'cuda')
         """
-        self.device = device
+        # Auto-detect device if not specified
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+     
         self.wav2vec2_model_name = wav2vec2_model_name
         
         # Initialize models

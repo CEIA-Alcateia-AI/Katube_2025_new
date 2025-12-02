@@ -83,31 +83,31 @@ class MOSQualityFilter:
             return False
     
     def predict_mos_score(self, audio_path: Path) -> float:
-        """
-        Predict MOS score for audio file using SHEET predictor (OBRIGATÓRIO).
-        
-        Args:
-            audio_path: Path to audio file
-            
-        Returns:
-            MOS score (1.0-5.0)
-        """
         try:
             if self.predictor is None:
                 raise RuntimeError("❌ Filtro MOS não foi inicializado corretamente")
             
-            # Check if file exists first
             if not audio_path.exists():
                 logger.error(f"❌ Arquivo não encontrado: {audio_path}")
-                return 1.0  # Return low score for missing files
+                return 1.0
             
-            # SEMPRE usar SHEET predictor (obrigatório)
-            return self.predictor.predict(wav_path=str(audio_path))
+            # 🔥 FIX: Carregar áudio, converter para mono, squeeze e mover para GPU
+            import torchaudio
+            waveform, sr = torchaudio.load(str(audio_path))
+            
+            # Convert to mono if stereo
+            if waveform.shape[0] > 1:
+                waveform = waveform.mean(dim=0, keepdim=True)
+            
+            # Remove channel dimension and move to GPU
+            waveform = waveform.squeeze(0).to(self.device)
+            
+            # SEMPRE usar SHEET predictor (obrigatório) - formato correto: 1D tensor na GPU
+            return self.predictor.predict(wav=waveform)
                 
         except Exception as e:
             logger.error(f"❌ ERRO ao predizer MOS para {audio_path.name}: {e}")
             logger.error("🔧 Verifique se PyTorch está instalado: pip install torch torchaudio")
-            # Return low score instead of raising exception to continue pipeline
             return 1.0
     
     def _simple_quality_assessment(self, audio_path: Path) -> float:

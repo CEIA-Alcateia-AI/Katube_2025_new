@@ -251,7 +251,7 @@ class AudioSegmenter:
         cut_points = [0]  # Start of audio
         
         current_pos = 0
-        max_segment_duration = 60.0  # 1 minuto máximo conforme solicitado
+        max_segment_duration = 18.0  # 1 minuto máximo conforme solicitado
         
         while current_pos < len(audio):
             best_cut_point = None
