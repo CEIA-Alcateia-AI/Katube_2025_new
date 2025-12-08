@@ -1,0 +1,607 @@
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/webrtcvad.py:1: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/df/io.py:9: UserWarning: `torchaudio.backend.common.AudioMetaData` has been moved to `torchaudio.AudioMetaData`. Please update the import path.
+  from torchaudio.backend.common import AudioMetaData
+INFO:__main__:🚀 Iniciando a Pipeline de Processamento de Áudio Local...
+INFO:__main__:Diretório de Entrada: /home/ubuntu/experimentos_fred/downloaded_segments_2/0/show_20BgHHFmBazsgqkM82Agg6
+INFO:__main__:Diretório Base de Saída: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output
+INFO:__main__:Política de Cleanup: final_dataset
+INFO:__main__:Usar CUDA: True
+ERROR:diarizer:Failed to load diarization pipeline: Pipeline.from_pretrained() got an unexpected keyword argument 'token'
+INFO:diarizer:Diarizer running on cpu
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/lightning_fabric/utilities/cloud_io.py:55: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+INFO:overlap_detector:✅ Loaded pyannote/segmentation-3.0 model for OSD (with authentication)
+INFO:pipeline:🔍 Filtros de áudio:
+INFO:pipeline:   - Filtro de completude: DESABILITADO (arquivo separado)
+INFO:pipeline:🔍 Inicializando STT transcribers separados...
+INFO:stt_whisper:🔄 Initializing Whisper STT model...
+INFO:stt_whisper:Loading Whisper model: freds0/distil-whisper-large-v3-ptbr
+INFO:stt_whisper:✅ Whisper model loaded successfully
+INFO:pipeline:✅ Whisper STT transcriber inicializado com sucesso
+INFO:stt_wav2vec2:🔄 Initializing WAV2VEC2 STT model...
+INFO:stt_wav2vec2:Loading WAV2VEC2 model: lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2
+INFO:stt_wav2vec2:   Model: alefiury/wav2vec2-large-xlsr-53-coraa-brazilian-portuguese-gain-normalization
+INFO:stt_wav2vec2:   Specialized for Brazilian Portuguese
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+Some weights of the model checkpoint at lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2 were not used when initializing Wav2Vec2ForCTC: ['wav2vec2.encoder.pos_conv_embed.conv.weight_g', 'wav2vec2.encoder.pos_conv_embed.conv.weight_v']
+- This IS expected if you are initializing Wav2Vec2ForCTC from the checkpoint of a model trained on another task or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).
+- This IS NOT expected if you are initializing Wav2Vec2ForCTC from the checkpoint of a model that you expect to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model).
+Some weights of Wav2Vec2ForCTC were not initialized from the model checkpoint at lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2 and are newly initialized: ['wav2vec2.encoder.pos_conv_embed.conv.parametrizations.weight.original0', 'wav2vec2.encoder.pos_conv_embed.conv.parametrizations.weight.original1']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+INFO:stt_wav2vec2:✅ WAV2VEC2 model loaded successfully
+INFO:pipeline:✅ WAV2VEC2 STT transcriber inicializado com sucesso
+INFO:audio_normalizer:✅ FFmpeg is available
+2025-12-03 03:36:14 | INFO     | DF | Running on torch 2.5.1+cu124
+2025-12-03 03:36:14 | INFO     | DF | Running on host ip-172-31-74-127
+fatal: not a git repository (or any of the parent directories): .git
+2025-12-03 03:36:14 | INFO     | DF | Loading model settings of DeepFilterNet3
+2025-12-03 03:36:14 | INFO     | DF | Using DeepFilterNet3 model at /home/ubuntu/.cache/DeepFilterNet/DeepFilterNet3
+2025-12-03 03:36:14 | INFO     | DF | Initializing model `deepfilternet3`
+2025-12-03 03:36:14 | INFO     | DF | Found checkpoint /home/ubuntu/.cache/DeepFilterNet/DeepFilterNet3/checkpoints/model_120.ckpt.best with epoch 120
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/df/checkpoint.py:77: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  latest = torch.load(latest, map_location="cpu")
+2025-12-03 03:36:14 | INFO     | DF | Running on device cuda:0
+2025-12-03 03:36:14 | INFO     | DF | Model loaded
+INFO:pipeline:✅ Denoiser (DeepFilterNet3) inicializado com sucesso
+INFO:pipeline:✅ Sox normalizer inicializado com sucesso
+INFO:pipeline:=== STARTING COMPLETE PIPELINE ===
+INFO:pipeline:Processing file: /home/ubuntu/experimentos_fred/downloaded_segments_2/0/show_20BgHHFmBazsgqkM82Agg6
+INFO:pipeline:📁 Session local criada: show_20BgHHFmBazsgqkM82Agg6
+INFO:pipeline:Created session: show_20BgHHFmBazsgqkM82Agg6
+INFO:pipeline:🔄 Normalizing 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_796.29_820.06.ogg -> audio.flac
+INFO:audio_normalizer:🔄 Normalizing audio: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_796.29_820.06.ogg
+INFO:audio_normalizer:   Target: flac, 24000Hz, 1 channel(s)
+INFO:audio_normalizer:✅ Audio normalized successfully
+INFO:audio_normalizer:   Input: 0.1 MB
+INFO:audio_normalizer:   Output: 1.1 MB
+INFO:audio_normalizer:   Saved to: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/downloads/audio.flac
+INFO:pipeline:✅ Audio ready: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/downloads/audio.flac
+INFO:pipeline:=== STEP 2: SEGMENTING AUDIO ===
+INFO:audio_segmenter:Loaded audio: 23.76s at 24000Hz
+INFO:audio_segmenter:Found 388 suitable silence regions for cutting
+INFO:audio_segmenter:Silence durations: min=0.21s, max=207.66s, avg=3.48s
+INFO:audio_segmenter:Created 1 segments using intelligent silence detection
+INFO:audio_segmenter:Found 1 potential segments
+INFO:audio_segmenter:Created 1 segments with timestamps
+INFO:pipeline:Created 1 segments
+INFO:pipeline:Timestamps metadata saved to: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/segments_timestamps.json
+INFO:pipeline:Saved segmentation metadata for 1 segments
+INFO:pipeline:=== STEP 3: PERFORMING SPEAKER DIARIZATION ===
+ERROR:diarizer:Diarization pipeline not available. Please accept model terms and restart server.
+ERROR:diarizer:Failed to process /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac: Diarization pipeline not available. Please accept model terms and restart server.
+INFO:pipeline:Diarization completed: 0 successful, 1 failed
+WARNING:pipeline:Failed files: ['/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac']
+INFO:pipeline:=== STEP 4: DETECTING VOICE OVERLAPS ===
+INFO:overlap_detector:🔍 Processing 1 segments for overlap detection...
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/asteroid_filterbanks/enc_dec.py:202: UserWarning: Input tensor was 2D. Applying the corresponding Decoder to the current output will result in a 3D tensor. This behaviours was introduced to match Conv1D and ConvTranspose1D, please use 3D inputs to avoid it. For example, this can be done with input_tensor.unsqueeze(1).
+  warnings.warn(
+WARNING:overlap_detector:🔄 Using fallback overlap detection
+INFO:overlap_detector:📊 Overlap detection completed:
+INFO:overlap_detector:   - Total segments: 1
+INFO:overlap_detector:   - Overlapping: 0 (0.0%)
+INFO:overlap_detector:   - Non-overlapping: 1
+INFO:pipeline:Overlap detection: 1 clean, 0 overlapping
+INFO:pipeline:=== STEP 5: SEPARATING SPEAKERS ===
+INFO:pipeline:Speaker separation: 0 speakers, 0 segments
+INFO:pipeline:=== STEP 6: PREPARING FOR STT ===
+INFO:pipeline:STT preparation: 0 speakers, 0 files ready
+INFO:pipeline:=== STEP 7: TRANSCRIBING AUDIO SEGMENTS ===
+INFO:pipeline:🎤 Transcribing with Whisper...
+INFO:stt_whisper:🎤 Starting Whisper STT transcription of 1 segments...
+INFO:stt_whisper:Processing segment 1/1: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+Due to a bug fix in https://github.com/huggingface/transformers/pull/28687 transcription using a multilingual Whisper will default to language detection followed by transcription instead of translation to English.This might be a breaking change for your use case. If you want to instead always translate your audio to English, make sure to pass `language='en'`.
+ERROR:stt_whisper:Error transcribing with Whisper /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac: Input type (float) and bias type (c10::Half) should be the same
+INFO:stt_whisper:✅ Transcribed 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+INFO:stt_whisper:Whisper STT completed: 1 transcriptions
+INFO:pipeline:✅ Whisper transcription completed: 1 segments
+INFO:pipeline:🎤 Transcribing with WAV2VEC2...
+INFO:stt_wav2vec2:🎤 Starting WAV2VEC2 STT transcription of 1 segments...
+INFO:stt_wav2vec2:Processing segment 1/1: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+INFO:stt_wav2vec2:✅ Transcribed 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+INFO:stt_wav2vec2:WAV2VEC2 STT completed: 1 transcriptions
+INFO:pipeline:✅ WAV2VEC2 transcription completed: 1 segments
+INFO:pipeline:Transcription completed: 1 Whisper, 1 WAV2VEC2
+INFO:pipeline:=== STEP 7.5: NORMALIZING STT TEXTS ===
+INFO:src.marcos_validation.text_normalizer:Processando resultados STT em: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6
+INFO:src.marcos_validation.text_normalizer:Encontrados 1 arquivos Whisper
+INFO:src.marcos_validation.text_normalizer:Encontrados 1 arquivos WAV2VEC2
+INFO:src.marcos_validation.text_normalizer:⚠️ Buscando fallback final na pasta bruta 'segments'...
+INFO:src.marcos_validation.text_normalizer:Encontrados 1 arquivos FLAC (Total)
+WARNING:src.marcos_validation.text_normalizer:Numeracao inconsistente: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_whisper.txt vs 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_wav2vec2.txt
+INFO:src.marcos_validation.text_normalizer:✅ Criados 1 pares de mapeamento válidos
+INFO:src.marcos_validation.text_normalizer:Arquivo de normalização salvo em: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json
+INFO:pipeline:Text normalization completed:
+INFO:pipeline:   - Total videos: 1
+INFO:pipeline:   - Total segments: 1
+INFO:pipeline:   - Output files: 1
+INFO:pipeline:=== STEP 8: VALIDATING STT TRANSCRIPTIONS ===
+INFO:src.marcos_validation.validador_transcricao:Processando arquivo: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json
+INFO:src.marcos_validation.validador_transcricao:Video ID: 7gKesMdueF0zjgOXXVKYUf
+INFO:src.marcos_validation.validador_transcricao:Total de segmentos: 1
+WARNING:src.marcos_validation.validador_transcricao:Arquivo MOS nao encontrado: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_mos_scores.json
+WARNING:src.marcos_validation.validador_transcricao:Textos vazios em 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001, pulando
+INFO:src.marcos_validation.validador_transcricao:Validados: 0/1
+INFO:src.marcos_validation.validador_transcricao:MOS encontrados: 0/0
+INFO:src.marcos_validation.validador_transcricao:Similaridade media: 0.0000
+INFO:src.marcos_validation.validador_transcricao:Similaridade minima: 0.0000
+INFO:src.marcos_validation.validador_transcricao:Similaridade maxima: 0.0000
+INFO:src.marcos_validation.validador_transcricao:Arquivo de validacao salvo em: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_text_validation.json
+INFO:pipeline:STT validation completed:
+INFO:pipeline:   - Average similarity: 0.000
+INFO:pipeline:   - Output file: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_text_validation.json
+INFO:pipeline:=== STEP 9: FILTERING AND DENOISING SEGMENTS ===
+INFO:pipeline:Processing 1 segments for video: 7gKesMdueF0zjgOXXVKYUf
+INFO:pipeline:
+Processing: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001
+INFO:pipeline:  Similarity: 0.000
+WARNING:pipeline:  Passando Denoiser nos áudios de baixa qualidade...
+INFO:pipeline:  Applying DeepFilterNet3...
+2025-12-03 03:36:15 | WARNING  | DF | Audio sampling rate does not match model sampling rate (24000, 48000). Resampling...
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/df/io.py:106: UserWarning: "sinc_interpolation" resampling method name is being deprecated and replaced by "sinc_interp_hann" in the next release. The default behavior remains unchanged.
+  return ta_resample(audio, orig_sr, new_sr, **params)
+INFO:pipeline:  Denoised successfully
+WARNING:pipeline:Nome de arquivo invalido (poucos parts): 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+INFO:pipeline:
+============================================================
+INFO:pipeline:FILTER AND DENOISE COMPLETED
+INFO:pipeline:============================================================
+INFO:pipeline:Total segments processed: 1
+INFO:pipeline:
+APPROVED: 1
+INFO:pipeline:  - With denoising: 1 (successfully denoised: 1)
+INFO:pipeline:
+Final JSON saved: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser/7gKesMdueF0zjgOXXVKYUf_final_audio_dataset.json
+INFO:pipeline:All approved audio files in: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser
+INFO:pipeline:============================================================
+
+INFO:pipeline:Filtering and denoising completed:
+INFO:pipeline:   - Approved count: 1
+INFO:pipeline:   - Denoised count: 1
+INFO:pipeline:=== STEP 10: SOX NORMALIZATION ===
+INFO:pipeline:Dataset base: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset
+INFO:pipeline:Output directory: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf
+INFO:pipeline:Found 1 audio files to normalize
+INFO:pipeline:
+[1/1] Processing: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:sox_normalizer:🔄 Normalizing audio with Sox: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:sox_normalizer:   Target: flac, 48000Hz, 1 channel(s)
+INFO:sox_normalizer:✅ Audio normalized successfully with Sox
+INFO:sox_normalizer:   Input: 0.6 MB
+INFO:sox_normalizer:   Output: 0.6 MB
+INFO:sox_normalizer:   Saved to: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:pipeline:  SUCCESS -> 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:pipeline:
+============================================================
+INFO:pipeline:SOX NORMALIZATION COMPLETED
+INFO:pipeline:============================================================
+INFO:pipeline:Total files: 1
+INFO:pipeline:  Success: 1
+INFO:pipeline:  Failed: 0
+INFO:pipeline:Output directory: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf
+INFO:pipeline:============================================================
+
+INFO:pipeline:Sox normalization completed:
+INFO:pipeline:   - Normalized: 1/1
+INFO:pipeline:   - Output: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf
+INFO:pipeline:Iniciando criacao/atualizacao do dataset.csv...
+INFO:pipeline:=== STEP 11: CREATING/UPDATING DATASET.CSV ===
+INFO:pipeline:Segmentos aprovados encontrados: 1
+INFO:pipeline:Validado: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001 - Audio existe em /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:pipeline:CSV existente, adicionando dados: /home/ubuntu/Katube_2025_new/katube-novo/dataset/dataset.csv
+INFO:pipeline:Dataset CSV atualizado com sucesso!
+INFO:pipeline:  Total de segmentos adicionados: 1
+INFO:pipeline:  Arquivo CSV: /home/ubuntu/Katube_2025_new/katube-novo/dataset/dataset.csv
+INFO:pipeline:Dataset CSV atualizado:
+INFO:pipeline:   - Segmentos adicionados: 1
+INFO:pipeline:   - Arquivo: /home/ubuntu/Katube_2025_new/katube-novo/dataset/dataset.csv
+INFO:pipeline:Copiando JSON final para historico...
+INFO:pipeline:JSON copiado para historico: /home/ubuntu/Katube_2025_new/katube-novo/dataset/historico_dataset/7gKesMdueF0zjgOXXVKYUf.json
+INFO:pipeline:✅ STT transcription completed: 1 Whisper, 1 WAV2VEC2
+INFO:pipeline:📊 STT Validation: 0.000 avg similarity
+INFO:pipeline:📊 Filtro 80%: 0 validados, 0 denoised
+INFO:pipeline:✅ 1 segments moved to final approved directory
+INFO:pipeline:=== PIPELINE COMPLETED SUCCESSFULLY ===
+INFO:pipeline:Processing time: 3.10s
+INFO:pipeline:Results saved to: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/pipeline_results.json
+INFO:__main__:✅ Pipeline concluída com sucesso!
+INFO:__main__:Resultados:
+INFO:__main__:🧹 Executando cleanup final...
+[INFO] Modelo DeepFilterNet3 carregado no dispositivo: cuda
+[INFO] Arquivo processado e salvo em: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+{
+  "session_name": "show_20BgHHFmBazsgqkM82Agg6",
+  "session_dir": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6",
+  "processing_time": 3.103806972503662,
+  "downloaded_audio": "/home/ubuntu/experimentos_fred/downloaded_segments_2/0/show_20BgHHFmBazsgqkM82Agg6",
+  "num_segments": 1,
+  "num_clean_segments": 1,
+  "num_overlapping_segments": 0,
+  "diarization_results": {
+    "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac": {
+      "error": "Diarization pipeline not available. Please accept model terms and restart server."
+    }
+  },
+  "separation_results": {},
+  "stt_ready_files": {},
+  "stt_results": {
+    "whisper_results": [
+      {
+        "segment": "7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac",
+        "transcription": "",
+        "file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/stt_results/STT-whisper/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_whisper.txt"
+      }
+    ],
+    "wav2vec2_results": [
+      {
+        "segment": "7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac",
+        "transcription": "EMIO QOALDO APRESENTO RACISMO DESSAGUADORO DO PROCESSO DE COLONIZAÇÃO E ESCRAVIDÃO E REFLEXO DO PROCESSO DE HERARQIZAÇÃO HUMANA A RARE DETALHA MUITOS ASPECTOS DA EXPERIÊNCIA DOS NEGROS NUZEUA E TAMBÉM A POLITICA DO APARTAIT QUE ATÉ A METADE O SÉCULO VINTE RODULAVA NEGROS COM OMEIOS INTELLIGENTES BORNATUREZA POUCOS CONFIÁVEIS E OIOA",
+        "file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/stt_results/STT-wav2vec2/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_wav2vec2.txt"
+      }
+    ],
+    "whisper_dir": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/stt_results/STT-whisper",
+    "wav2vec2_dir": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/stt_results/STT-wav2vec2",
+    "total_segments": 1,
+    "whisper_count": 1,
+    "wav2vec2_count": 1,
+    "normalization": {
+      "success": true,
+      "output_file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json",
+      "output_files": [
+        "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json"
+      ],
+      "total_segments": 1,
+      "total_videos": 1,
+      "video_id": "7gKesMdueF0zjgOXXVKYUf"
+    },
+    "validation": {
+      "success": true,
+      "input_file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json",
+      "output_file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_text_validation.json",
+      "video_id": "7gKesMdueF0zjgOXXVKYUf",
+      "total_segments": 1,
+      "validated_segments": 0,
+      "mos_scores_found": 0,
+      "average_similarity": 0.0,
+      "min_similarity": 0.0,
+      "max_similarity": 0.0
+    },
+    "filter_and_denoise": {
+      "success": true,
+      "video_id": "7gKesMdueF0zjgOXXVKYUf",
+      "total_segments": 1,
+      "approved_count": 1,
+      "approved_with_denoise": 1,
+      "denoised_success": 1,
+      "final_json_path": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser/7gKesMdueF0zjgOXXVKYUf_final_audio_dataset.json",
+      "denoiser_dir": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser"
+    },
+    "sox_normalization": {
+      "success": true,
+      "video_id": "7gKesMdueF0zjgOXXVKYUf",
+      "total_files": 1,
+      "success_count": 1,
+      "failed_count": 0,
+      "output_dir": "/home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf",
+      "normalized_files": [
+        "/home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac"
+      ]
+    },
+    "dataset_csv": {
+      "success": true,
+      "csv_path": "/home/ubuntu/Katube_2025_new/katube-novo/dataset/dataset.csv",
+      "approved_count": 1,
+      "video_id": "7gKesMdueF0zjgOXXVKYUf",
+      "historico_json": "/home/ubuntu/Katube_2025_new/katube-novo/dataset/historico_dataset/7gKesMdueF0zjgOXXVKYUf.json"
+    }
+  },
+  "statistics": {
+    "num_speakers": 0,
+    "total_stt_files": 0,
+    "speakers": {}
+  }
+}
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/webrtcvad.py:1: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/df/io.py:9: UserWarning: `torchaudio.backend.common.AudioMetaData` has been moved to `torchaudio.AudioMetaData`. Please update the import path.
+  from torchaudio.backend.common import AudioMetaData
+INFO:__main__:🚀 Iniciando a Pipeline de Processamento de Áudio Local...
+INFO:__main__:Diretório de Entrada: /home/ubuntu/experimentos_fred/downloaded_segments_2/0/show_20BgHHFmBazsgqkM82Agg6
+INFO:__main__:Diretório Base de Saída: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output
+INFO:__main__:Política de Cleanup: final_dataset
+INFO:__main__:Usar CUDA: True
+ERROR:diarizer:Failed to load diarization pipeline: Pipeline.from_pretrained() got an unexpected keyword argument 'token'
+INFO:diarizer:Diarizer running on cuda
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/lightning_fabric/utilities/cloud_io.py:55: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+INFO:overlap_detector:✅ Loaded pyannote/segmentation-3.0 model for OSD (with authentication)
+INFO:pipeline:🔍 Filtros de áudio:
+INFO:pipeline:   - Filtro de completude: DESABILITADO (arquivo separado)
+INFO:pipeline:🔍 Inicializando STT transcribers separados...
+INFO:stt_whisper:🔄 Initializing Whisper STT model...
+INFO:stt_whisper:Loading Whisper model: freds0/distil-whisper-large-v3-ptbr
+INFO:stt_whisper:✅ Whisper model loaded successfully
+INFO:pipeline:✅ Whisper STT transcriber inicializado com sucesso
+INFO:stt_wav2vec2:🔄 Initializing WAV2VEC2 STT model...
+INFO:stt_wav2vec2:Loading WAV2VEC2 model: lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2
+INFO:stt_wav2vec2:   Model: alefiury/wav2vec2-large-xlsr-53-coraa-brazilian-portuguese-gain-normalization
+INFO:stt_wav2vec2:   Specialized for Brazilian Portuguese
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+Some weights of the model checkpoint at lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2 were not used when initializing Wav2Vec2ForCTC: ['wav2vec2.encoder.pos_conv_embed.conv.weight_g', 'wav2vec2.encoder.pos_conv_embed.conv.weight_v']
+- This IS expected if you are initializing Wav2Vec2ForCTC from the checkpoint of a model trained on another task or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).
+- This IS NOT expected if you are initializing Wav2Vec2ForCTC from the checkpoint of a model that you expect to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model).
+Some weights of Wav2Vec2ForCTC were not initialized from the model checkpoint at lgris/wav2vec2-large-xlsr-open-brazilian-portuguese-v2 and are newly initialized: ['wav2vec2.encoder.pos_conv_embed.conv.parametrizations.weight.original0', 'wav2vec2.encoder.pos_conv_embed.conv.parametrizations.weight.original1']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+INFO:stt_wav2vec2:✅ WAV2VEC2 model loaded successfully
+INFO:pipeline:✅ WAV2VEC2 STT transcriber inicializado com sucesso
+INFO:audio_normalizer:✅ FFmpeg is available
+2025-12-03 03:56:21 | INFO     | DF | Running on torch 2.5.1+cu124
+2025-12-03 03:56:21 | INFO     | DF | Running on host ip-172-31-74-127
+fatal: not a git repository (or any of the parent directories): .git
+2025-12-03 03:56:21 | INFO     | DF | Loading model settings of DeepFilterNet3
+2025-12-03 03:56:21 | INFO     | DF | Using DeepFilterNet3 model at /home/ubuntu/.cache/DeepFilterNet/DeepFilterNet3
+2025-12-03 03:56:21 | INFO     | DF | Initializing model `deepfilternet3`
+2025-12-03 03:56:21 | INFO     | DF | Found checkpoint /home/ubuntu/.cache/DeepFilterNet/DeepFilterNet3/checkpoints/model_120.ckpt.best with epoch 120
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/df/checkpoint.py:77: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  latest = torch.load(latest, map_location="cpu")
+2025-12-03 03:56:21 | INFO     | DF | Running on device cuda:0
+2025-12-03 03:56:21 | INFO     | DF | Model loaded
+INFO:pipeline:✅ Denoiser (DeepFilterNet3) inicializado com sucesso
+INFO:pipeline:✅ Sox normalizer inicializado com sucesso
+INFO:pipeline:=== STARTING COMPLETE PIPELINE ===
+INFO:pipeline:Processing file: /home/ubuntu/experimentos_fred/downloaded_segments_2/0/show_20BgHHFmBazsgqkM82Agg6
+INFO:pipeline:📁 Session local criada: show_20BgHHFmBazsgqkM82Agg6
+INFO:pipeline:Created session: show_20BgHHFmBazsgqkM82Agg6
+INFO:pipeline:🔄 Normalizing 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_796.29_820.06.ogg -> audio.flac
+INFO:audio_normalizer:🔄 Normalizing audio: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_796.29_820.06.ogg
+INFO:audio_normalizer:   Target: flac, 24000Hz, 1 channel(s)
+INFO:audio_normalizer:✅ Audio normalized successfully
+INFO:audio_normalizer:   Input: 0.1 MB
+INFO:audio_normalizer:   Output: 1.1 MB
+INFO:audio_normalizer:   Saved to: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/downloads/audio.flac
+INFO:pipeline:✅ Audio ready: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/downloads/audio.flac
+INFO:pipeline:=== STEP 2: SEGMENTING AUDIO ===
+INFO:audio_segmenter:Loaded audio: 23.76s at 24000Hz
+INFO:audio_segmenter:Found 388 suitable silence regions for cutting
+INFO:audio_segmenter:Silence durations: min=0.21s, max=207.66s, avg=3.48s
+INFO:audio_segmenter:Created 1 segments using intelligent silence detection
+INFO:audio_segmenter:Found 1 potential segments
+INFO:audio_segmenter:Created 1 segments with timestamps
+INFO:pipeline:Created 1 segments
+INFO:pipeline:Timestamps metadata saved to: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/segments_timestamps.json
+INFO:pipeline:Saved segmentation metadata for 1 segments
+INFO:pipeline:=== STEP 3: PERFORMING SPEAKER DIARIZATION ===
+ERROR:diarizer:Diarization pipeline not available. Please accept model terms and restart server.
+ERROR:diarizer:Failed to process /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac: Diarization pipeline not available. Please accept model terms and restart server.
+INFO:pipeline:Diarization completed: 0 successful, 1 failed
+WARNING:pipeline:Failed files: ['/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac']
+INFO:pipeline:=== STEP 4: DETECTING VOICE OVERLAPS ===
+INFO:overlap_detector:🔍 Processing 1 segments for overlap detection...
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/asteroid_filterbanks/enc_dec.py:202: UserWarning: Input tensor was 2D. Applying the corresponding Decoder to the current output will result in a 3D tensor. This behaviours was introduced to match Conv1D and ConvTranspose1D, please use 3D inputs to avoid it. For example, this can be done with input_tensor.unsqueeze(1).
+  warnings.warn(
+WARNING:overlap_detector:🔄 Using fallback overlap detection
+INFO:overlap_detector:📊 Overlap detection completed:
+INFO:overlap_detector:   - Total segments: 1
+INFO:overlap_detector:   - Overlapping: 0 (0.0%)
+INFO:overlap_detector:   - Non-overlapping: 1
+INFO:pipeline:Overlap detection: 1 clean, 0 overlapping
+INFO:pipeline:=== STEP 5: SEPARATING SPEAKERS ===
+INFO:pipeline:Speaker separation: 0 speakers, 0 segments
+INFO:pipeline:=== STEP 6: PREPARING FOR STT ===
+INFO:pipeline:STT preparation: 0 speakers, 0 files ready
+INFO:pipeline:=== STEP 7: TRANSCRIBING AUDIO SEGMENTS ===
+INFO:pipeline:🎤 Transcribing with Whisper...
+INFO:stt_whisper:🎤 Starting Whisper STT transcription of 1 segments...
+INFO:stt_whisper:Processing segment 1/1: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+Due to a bug fix in https://github.com/huggingface/transformers/pull/28687 transcription using a multilingual Whisper will default to language detection followed by transcription instead of translation to English.This might be a breaking change for your use case. If you want to instead always translate your audio to English, make sure to pass `language='en'`.
+ERROR:stt_whisper:Error transcribing with Whisper /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac: Input type (float) and bias type (c10::Half) should be the same
+INFO:stt_whisper:✅ Transcribed 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+INFO:stt_whisper:Whisper STT completed: 1 transcriptions
+INFO:pipeline:✅ Whisper transcription completed: 1 segments
+INFO:pipeline:🎤 Transcribing with WAV2VEC2...
+INFO:stt_wav2vec2:🎤 Starting WAV2VEC2 STT transcription of 1 segments...
+INFO:stt_wav2vec2:Processing segment 1/1: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+INFO:stt_wav2vec2:✅ Transcribed 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+INFO:stt_wav2vec2:WAV2VEC2 STT completed: 1 transcriptions
+INFO:pipeline:✅ WAV2VEC2 transcription completed: 1 segments
+INFO:pipeline:Transcription completed: 1 Whisper, 1 WAV2VEC2
+INFO:pipeline:=== STEP 7.5: NORMALIZING STT TEXTS ===
+INFO:src.marcos_validation.text_normalizer:Processando resultados STT em: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6
+INFO:src.marcos_validation.text_normalizer:Encontrados 1 arquivos Whisper
+INFO:src.marcos_validation.text_normalizer:Encontrados 1 arquivos WAV2VEC2
+INFO:src.marcos_validation.text_normalizer:⚠️ Nenhum arquivo em stt_ready. Buscando fallback em 'segments_aprovados'...
+INFO:src.marcos_validation.text_normalizer:Encontrados 1 arquivos FLAC (Total)
+WARNING:src.marcos_validation.text_normalizer:Numeracao inconsistente: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_whisper.txt vs 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_wav2vec2.txt
+INFO:src.marcos_validation.text_normalizer:✅ Criados 1 pares de mapeamento válidos
+INFO:src.marcos_validation.text_normalizer:Arquivo de normalização salvo em: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json
+INFO:pipeline:Text normalization completed:
+INFO:pipeline:   - Total videos: 1
+INFO:pipeline:   - Total segments: 1
+INFO:pipeline:   - Output files: 1
+INFO:pipeline:=== STEP 8: VALIDATING STT TRANSCRIPTIONS ===
+INFO:src.marcos_validation.validador_transcricao:Processando arquivo: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json
+INFO:src.marcos_validation.validador_transcricao:Video ID: 7gKesMdueF0zjgOXXVKYUf
+INFO:src.marcos_validation.validador_transcricao:Total de segmentos: 1
+WARNING:src.marcos_validation.validador_transcricao:Arquivo MOS nao encontrado: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_mos_scores.json
+WARNING:src.marcos_validation.validador_transcricao:Textos vazios em 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001, pulando
+INFO:src.marcos_validation.validador_transcricao:Validados: 0/1
+INFO:src.marcos_validation.validador_transcricao:MOS encontrados: 0/0
+INFO:src.marcos_validation.validador_transcricao:Similaridade media: 0.0000
+INFO:src.marcos_validation.validador_transcricao:Similaridade minima: 0.0000
+INFO:src.marcos_validation.validador_transcricao:Similaridade maxima: 0.0000
+INFO:src.marcos_validation.validador_transcricao:Arquivo de validacao salvo em: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_text_validation.json
+INFO:pipeline:STT validation completed:
+INFO:pipeline:   - Average similarity: 0.000
+INFO:pipeline:   - Output file: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_text_validation.json
+INFO:pipeline:=== STEP 9: FILTERING AND DENOISING SEGMENTS ===
+INFO:pipeline:Processing 1 segments for video: 7gKesMdueF0zjgOXXVKYUf
+INFO:pipeline:
+Processing: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001
+INFO:pipeline:  Similarity: 0.000
+WARNING:pipeline:  Passando Denoiser nos áudios de baixa qualidade...
+INFO:pipeline:  Applying DeepFilterNet3...
+2025-12-03 03:56:23 | WARNING  | DF | Audio sampling rate does not match model sampling rate (24000, 48000). Resampling...
+/home/ubuntu/miniconda3/envs/katube-server/lib/python3.10/site-packages/df/io.py:106: UserWarning: "sinc_interpolation" resampling method name is being deprecated and replaced by "sinc_interp_hann" in the next release. The default behavior remains unchanged.
+  return ta_resample(audio, orig_sr, new_sr, **params)
+INFO:pipeline:  Denoised successfully
+WARNING:pipeline:Nome de arquivo invalido (poucos parts): 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac
+INFO:pipeline:
+============================================================
+INFO:pipeline:FILTER AND DENOISE COMPLETED
+INFO:pipeline:============================================================
+INFO:pipeline:Total segments processed: 1
+INFO:pipeline:
+APPROVED: 1
+INFO:pipeline:  - With denoising: 1 (successfully denoised: 1)
+INFO:pipeline:
+Final JSON saved: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser/7gKesMdueF0zjgOXXVKYUf_final_audio_dataset.json
+INFO:pipeline:All approved audio files in: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser
+INFO:pipeline:============================================================
+
+INFO:pipeline:Filtering and denoising completed:
+INFO:pipeline:   - Approved count: 1
+INFO:pipeline:   - Denoised count: 1
+INFO:pipeline:=== STEP 10: SOX NORMALIZATION ===
+INFO:pipeline:Dataset base: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset
+INFO:pipeline:Output directory: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf
+INFO:pipeline:Found 1 audio files to normalize
+INFO:pipeline:
+[1/1] Processing: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:sox_normalizer:🔄 Normalizing audio with Sox: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:sox_normalizer:   Target: flac, 48000Hz, 1 channel(s)
+INFO:sox_normalizer:✅ Audio normalized successfully with Sox
+INFO:sox_normalizer:   Input: 0.6 MB
+INFO:sox_normalizer:   Output: 0.6 MB
+INFO:sox_normalizer:   Saved to: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:pipeline:  SUCCESS -> 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:pipeline:
+============================================================
+INFO:pipeline:SOX NORMALIZATION COMPLETED
+INFO:pipeline:============================================================
+INFO:pipeline:Total files: 1
+INFO:pipeline:  Success: 1
+INFO:pipeline:  Failed: 0
+INFO:pipeline:Output directory: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf
+INFO:pipeline:============================================================
+
+INFO:pipeline:Sox normalization completed:
+INFO:pipeline:   - Normalized: 1/1
+INFO:pipeline:   - Output: /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf
+INFO:pipeline:Iniciando criacao/atualizacao do dataset.csv...
+INFO:pipeline:=== STEP 11: CREATING/UPDATING DATASET.CSV ===
+INFO:pipeline:Segmentos aprovados encontrados: 1
+INFO:pipeline:Validado: 7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001 - Audio existe em /home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+INFO:pipeline:CSV existente, adicionando dados: /home/ubuntu/Katube_2025_new/katube-novo/dataset/dataset.csv
+INFO:pipeline:Dataset CSV atualizado com sucesso!
+INFO:pipeline:  Total de segmentos adicionados: 1
+INFO:pipeline:  Arquivo CSV: /home/ubuntu/Katube_2025_new/katube-novo/dataset/dataset.csv
+INFO:pipeline:Dataset CSV atualizado:
+INFO:pipeline:   - Segmentos adicionados: 1
+INFO:pipeline:   - Arquivo: /home/ubuntu/Katube_2025_new/katube-novo/dataset/dataset.csv
+INFO:pipeline:Copiando JSON final para historico...
+WARNING:pipeline:JSON ja existe, salvando como: 7gKesMdueF0zjgOXXVKYUf_v2.json
+INFO:pipeline:JSON copiado para historico: /home/ubuntu/Katube_2025_new/katube-novo/dataset/historico_dataset/7gKesMdueF0zjgOXXVKYUf_v2.json
+INFO:pipeline:✅ STT transcription completed: 1 Whisper, 1 WAV2VEC2
+INFO:pipeline:📊 STT Validation: 0.000 avg similarity
+INFO:pipeline:📊 Filtro 80%: 0 validados, 0 denoised
+INFO:pipeline:✅ 1 segments moved to final approved directory
+INFO:pipeline:=== PIPELINE COMPLETED SUCCESSFULLY ===
+INFO:pipeline:Processing time: 3.12s
+INFO:pipeline:Results saved to: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/pipeline_results.json
+INFO:__main__:✅ Pipeline concluída com sucesso!
+INFO:__main__:Resultados:
+INFO:__main__:🧹 Executando cleanup final...
+[INFO] Modelo DeepFilterNet3 carregado no dispositivo: cuda
+[INFO] Arquivo processado e salvo em: /home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac
+{
+  "session_name": "show_20BgHHFmBazsgqkM82Agg6",
+  "session_dir": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6",
+  "processing_time": 3.1242120265960693,
+  "downloaded_audio": "/home/ubuntu/experimentos_fred/downloaded_segments_2/0/show_20BgHHFmBazsgqkM82Agg6",
+  "num_segments": 1,
+  "num_clean_segments": 1,
+  "num_overlapping_segments": 0,
+  "diarization_results": {
+    "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/segments/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac": {
+      "error": "Diarization pipeline not available. Please accept model terms and restart server."
+    }
+  },
+  "separation_results": {},
+  "stt_ready_files": {},
+  "stt_results": {
+    "whisper_results": [
+      {
+        "segment": "7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac",
+        "transcription": "",
+        "file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/stt_results/STT-whisper/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_whisper.txt"
+      }
+    ],
+    "wav2vec2_results": [
+      {
+        "segment": "7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000.flac",
+        "transcription": "EMIO QOALDO APRESENTO RACISMO DESSAGUADORO DO PROCESSO DE COLONIZAÇÃO E ESCRAVIDÃO E REFLEXO DO PROCESSO DE HERARQIZAÇÃO HUMANA A RARE DETALHA MUITOS ASPECTOS DA EXPERIÊNCIA DOS NEGROS NUZEUA E TAMBÉM A POLITICA DO APARTAIT QUE ATÉ A METADE O SÉCULO VINTE RODULAVA NEGROS COM OMEIOS INTELLIGENTES BORNATUREZA POUCOS CONFIÁVEIS E OIOA",
+        "file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/stt_results/STT-wav2vec2/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_wav2vec2.txt"
+      }
+    ],
+    "whisper_dir": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/stt_results/STT-whisper",
+    "wav2vec2_dir": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/stt_results/STT-wav2vec2",
+    "total_segments": 1,
+    "whisper_count": 1,
+    "wav2vec2_count": 1,
+    "normalization": {
+      "success": true,
+      "output_file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json",
+      "output_files": [
+        "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json"
+      ],
+      "total_segments": 1,
+      "total_videos": 1,
+      "video_id": "7gKesMdueF0zjgOXXVKYUf"
+    },
+    "validation": {
+      "success": true,
+      "input_file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_normalized_text.json",
+      "output_file": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/stt_results/validation_results/7gKesMdueF0zjgOXXVKYUf_text_validation.json",
+      "video_id": "7gKesMdueF0zjgOXXVKYUf",
+      "total_segments": 1,
+      "validated_segments": 0,
+      "mos_scores_found": 0,
+      "average_similarity": 0.0,
+      "min_similarity": 0.0,
+      "max_similarity": 0.0
+    },
+    "filter_and_denoise": {
+      "success": true,
+      "video_id": "7gKesMdueF0zjgOXXVKYUf",
+      "total_segments": 1,
+      "approved_count": 1,
+      "approved_with_denoise": 1,
+      "denoised_success": 1,
+      "final_json_path": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser/7gKesMdueF0zjgOXXVKYUf_final_audio_dataset.json",
+      "denoiser_dir": "/home/ubuntu/Katube_2025_new/katube-novo/audios_baixados/output/show_20BgHHFmBazsgqkM82Agg6/audios_denoiser"
+    },
+    "sox_normalization": {
+      "success": true,
+      "video_id": "7gKesMdueF0zjgOXXVKYUf",
+      "total_files": 1,
+      "success_count": 1,
+      "failed_count": 0,
+      "output_dir": "/home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf",
+      "normalized_files": [
+        "/home/ubuntu/Katube_2025_new/katube-novo/dataset/audio_dataset/7gKesMdueF0zjgOXXVKYUf/7gKesMdueF0zjgOXXVKYUf_6ca74f659609d78697a2bfc8fb5eb460a699751b_segment_000_stt_001.flac"
+      ]
+    },
+    "dataset_csv": {
+      "success": true,
+      "csv_path": "/home/ubuntu/Katube_2025_new/katube-novo/dataset/dataset.csv",
+      "approved_count": 1,
+      "video_id": "7gKesMdueF0zjgOXXVKYUf",
+      "historico_json": "/home/ubuntu/Katube_2025_new/katube-novo/dataset/historico_dataset/7gKesMdueF0zjgOXXVKYUf_v2.json"
+    }
+  },
+  "statistics": {
+    "num_speakers": 0,
+    "total_stt_files": 0,
+    "speakers": {}
+  }
+}
