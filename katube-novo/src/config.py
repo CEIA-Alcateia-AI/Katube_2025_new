@@ -39,9 +39,6 @@ class Config:
     BASE_DIR = Path(__file__).parent.parent
     AUDIOS_BAIXADOS_DIR = Path(os.getenv('AUDIOS_BAIXADOS_DIR', r'C:\Users\Usuário\Desktop\katube-novo\audios_baixados'))
     OUTPUT_DIR = AUDIOS_BAIXADOS_DIR / "output"
-    TEMP_DIR = AUDIOS_BAIXADOS_DIR / "temp"
-    SEGMENTS_DIR = OUTPUT_DIR / "segments"
-    SPEAKERS_DIR = OUTPUT_DIR / "speakers"
     
     # YouTube download settings
     YOUTUBE_FORMAT = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best/worst"
@@ -52,5 +49,5 @@ class Config:
     @classmethod
     def create_directories(cls):
         """Create necessary directories."""
-        for dir_path in [cls.OUTPUT_DIR, cls.TEMP_DIR, cls.SEGMENTS_DIR, cls.SPEAKERS_DIR]:
+        for dir_path in [cls.OUTPUT_DIR]:
             dir_path.mkdir(parents=True, exist_ok=True)

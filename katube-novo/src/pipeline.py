@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Any, Union, Tuple
 import logging
 import json
 from datetime import datetime
+import shutil
 
 from .config import Config
 from .youtube_downloader import YouTubeDownloader
@@ -148,6 +149,19 @@ class AudioProcessingPipeline:
         logger.info(f"📁 Session local criada: {self.current_session}")
         logger.info(f"Created session: {self.current_session}")
         return self.session_dir
+
+
+    def cleanup(self, stages_to_clean: Optional[List[str]] = None):
+        for stage in stages_to_clean:
+            logger.info(f'\n\n\n ==== Limpando a pasta {stage} ===')
+            diretories_to_delete = self.session_dir / stage
+            if diretories_to_delete.exists():
+                try:                    
+                    logger.info(f"\n\n[FINAL CLEAN-UP] Deletando a pasta: {diretories_to_delete}")
+                    shutil.rmtree(diretories_to_delete)
+                    logger.info(f"✅ Sucesso: Diretório de downloads deletado: {diretories_to_delete}")
+                except Exception as e:
+                    logger.error(f"❌ Falha ao deletar o diretório de downloads: {e}")
     
     def download_youtube_audio(self, url: str, custom_filename: Optional[str] = None) -> Path:
         """
@@ -1291,7 +1305,10 @@ class AudioProcessingPipeline:
                     logger.warning(f"   ❌ Não encontrado: {denoised_path}")
             
             logger.info(f"📊 Total de áudios denoised coletados: {len(denoised_audio_paths)}")
-            
+
+            #logger.info("===\n\n\n LIMPEZA DE DIRETÓRIOS INTERMEDIÁRIOS ===")
+            #self.cleanup(stages_to_clean=["downloads", "segments", "stt_ready", "audios_abaixo_2,5_MOS", "audios_acima_3,0_MOS", "audios_validados_tts", "audios_denoiser", "clean", "audios_entre_2,5_e_3,0_MOS", "diarization", "overlapping", "speakers"])
+
             return {
                 'success': True,
                 'total_segments': len(validation_results),
