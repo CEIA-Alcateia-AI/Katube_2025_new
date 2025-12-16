@@ -1,0 +1,9 @@
+Arquivo de áudio: C:\Users\Usuário\Documents\GitHub\Katube_2025_new\katube-novo\audio\hxx49fdPQdI_Imposto_nos_dividendos_Veja_o_que_o_Haddad_Andrade_disse_a_respeito.flac
+Sample Rate: 24000 Hz
+Canais: 1
+Duração: 480.30 segundos
+
+RTTM: C:\Users\Usuário\Documents\GitHub\Katube_2025_new\katube-novo\test_output\hxx49fdPQdI_Imposto_nos_dividendos_Veja_o_que_o_Haddad_Andrade_disse_a_respeito.rttm
+
+Locutores detectados: 2
+Segmentos: 9

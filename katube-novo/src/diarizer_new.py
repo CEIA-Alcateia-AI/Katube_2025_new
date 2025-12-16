@@ -12,12 +12,21 @@ import logging
 from pyannote.audio import Pipeline
 from pyannote.core import Annotation, Segment, Timeline
 import soundfile as sf
+from tqdm import tqdm
 
 from .config import Config
 
 logger = logging.getLogger(__name__)
 
 class EnhancedDiarizer:
+    """
+    Enhanced speaker diarization using pyannote.
+    
+    IMPORTANTE: Este diarizer retorna APENAS timestamps de speaker.
+    O áudio original NÃO deve ser processado através deste pipeline para
+    evitar perda de qualidade devido à reamostragem para 16kHz.
+    """
+    
     def __init__(self, huggingface_token: Optional[str] = None):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.huggingface_token = huggingface_token or Config.HUGGINGFACE_TOKEN
@@ -50,73 +59,75 @@ class EnhancedDiarizer:
                 error_msg += "   • https://hf.co/pyannote/embedding\n"
                 error_msg += "Then restart the server."
             logger.error(error_msg)
-            self.pipeline = None  # Set to None instead of raising
+            self.pipeline = None
             return
     
-    def preprocess_audio(self, audio_path: Path) -> Tuple[torch.Tensor, int]:
-        """Preprocess audio for diarization."""
-        try:
-            # Load audio
-            waveform, sample_rate = torchaudio.load(audio_path)
+    def _validate_audio_file(self, audio_path: Path) -> None:
+        """
+        Validate audio file exists and has supported format.
+        
+        Args:
+            audio_path: Path to audio file
             
-            # Convert to mono if stereo
-            if waveform.shape[0] > 1:
-                waveform = torch.mean(waveform, dim=0, keepdim=True)
-            
-            # Resample if necessary
-            if sample_rate != self.sample_rate:
-                resampler = torchaudio.transforms.Resample(sample_rate, self.sample_rate)
-                waveform = resampler(waveform)
-                sample_rate = self.sample_rate
-            
-            # Normalize
-            waveform = waveform / torch.max(torch.abs(waveform))
-            
-            # Move to device
-            waveform = waveform.to(self.device)
-            
-            return waveform, sample_rate
-            
-        except Exception as e:
-            logger.error(f"Error preprocessing audio {audio_path}: {e}")
-            raise
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            ValueError: If format is unsupported
+        """
+        if not audio_path.exists():
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        
+        supported_formats = {'.wav', '.flac', '.mp3', '.m4a', '.ogg', '.opus', '.webm'}
+        if audio_path.suffix.lower() not in supported_formats:
+            raise ValueError(
+                f"Unsupported audio format: {audio_path.suffix}. "
+                f"Supported formats: {', '.join(supported_formats)}"
+            )
     
     def diarize_audio(self, audio_path: Path, num_speakers: Optional[int] = None) -> Annotation:
         """
         Perform speaker diarization on an audio file.
         
+        IMPORTANTE: pyannote reamostra internamente para 16kHz. Este método
+        retorna APENAS timestamps. O áudio original deve ser usado em outras
+        etapas do pipeline para manter a qualidade.
+        
         Args:
             audio_path: Path to audio file
-            num_speakers: Hint for number of speakers (optional)
+            num_speakers: Number of speakers (optional hint)
             
         Returns:
-            pyannote Annotation object
+            pyannote Annotation object containing only timestamps and speaker labels
+            
+        Raises:
+            RuntimeError: If pipeline is not available
+            FileNotFoundError: If audio file doesn't exist
+            ValueError: If audio format is unsupported
         """
         if self.pipeline is None:
             error_msg = "Diarization pipeline not available. Please accept model terms and restart server."
             logger.error(error_msg)
             raise RuntimeError(error_msg)
-            
+        
+        # Validate input
+        self._validate_audio_file(audio_path)
+        
         logger.info(f"Diarizing {audio_path.name}")
         
-        # Preprocess audio
-        waveform, sample_rate = self.preprocess_audio(audio_path)
-        
-        # Prepare input for pipeline
-        audio_input = {
-            "waveform": waveform,
-            "sample_rate": sample_rate
-        }
-        
-        # Add speaker count hint if provided
-        if num_speakers is not None:
-            # pyannote.audio 3.x way to set number of speakers
-            self.pipeline.instantiate({"clustering": {"num_clusters": num_speakers}})
-        
-        # Run diarization
+        # Let pyannote load and resample the audio internally
+        # DO NOT use the resampled audio in subsequent pipeline stages
         try:
-            diarization = self.pipeline(audio_input)
-            logger.info(f"Diarization completed: {len(diarization.labels())} speakers detected")
+            if num_speakers is not None:
+                logger.info(f"Using speaker count hint: {num_speakers}")
+                diarization = self.pipeline(str(audio_path), num_speakers=num_speakers)
+            else:
+                diarization = self.pipeline(str(audio_path))
+            
+            num_detected = len(diarization.labels())
+            logger.info(f"Diarization completed: {num_detected} speakers detected")
+            
+            if num_detected == 0:
+                logger.warning(f"No speakers detected in {audio_path.name}")
+            
             return diarization
             
         except Exception as e:
@@ -151,17 +162,24 @@ class EnhancedDiarizer:
     
     def save_rttm(self, annotation: Annotation, output_path: Path, audio_filename: str):
         """Save diarization results in RTTM format."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w') as f:
             annotation.write_rttm(f)
         logger.info(f"RTTM saved to {output_path}")
     
-    def post_process_annotation(self, annotation: Annotation, min_duration: float = 0.5) -> Annotation:
+    def post_process_annotation(
+        self, 
+        annotation: Annotation, 
+        min_duration: float = 0.5,
+        collar: float = 0.5
+    ) -> Annotation:
         """
         Post-process diarization results.
         
         Args:
             annotation: Original annotation
-            min_duration: Minimum segment duration to keep
+            min_duration: Minimum segment duration to keep (seconds)
+            collar: Maximum gap to merge between segments (seconds)
             
         Returns:
             Processed annotation
@@ -169,19 +187,21 @@ class EnhancedDiarizer:
         # Remove very short segments
         cleaned = annotation.support(min_duration)
         
-        # Skip gap filling for now - simplified approach
-        filled = cleaned
-        
         # Merge nearby segments from the same speaker
         processed = Annotation()
         
         for speaker in cleaned.labels():
             speaker_timeline = cleaned.label_timeline(speaker)
-            # Merge segments that are close together (within 0.5 seconds)
-            merged_timeline = speaker_timeline.support(0.5)
+            # support() merges segments within collar distance
+            merged_timeline = speaker_timeline.support(collar)
             
             for segment in merged_timeline:
                 processed[segment] = speaker
+        
+        logger.info(
+            f"Post-processing: {len(list(annotation.itertracks()))} segments -> "
+            f"{len(list(processed.itertracks()))} segments"
+        )
         
         return processed
     
@@ -222,42 +242,73 @@ class EnhancedDiarizer:
         return stats
     
     def _detect_overlaps_in_annotation(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Detect overlaps in the diarization annotation."""
+        """
+        Detect overlaps in the diarization annotation using sweep line algorithm.
+        
+        This is more efficient than comparing all pairs and catches all overlaps,
+        not just consecutive segments.
+        """
         if df.empty:
             return {'num_overlaps': 0, 'total_overlap_duration': 0.0}
         
         overlaps = []
+        df_sorted = df.sort_values('START').reset_index(drop=True)
         
-        # Sort by start time
-        df_sorted = df.sort_values('START')
+        # Create events for sweep line algorithm
+        events = []
+        for idx, row in df_sorted.iterrows():
+            events.append(('start', row['START'], row['SPEAKER'], idx, row['END']))
+            events.append(('end', row['END'], row['SPEAKER'], idx, row['END']))
         
-        for i in range(len(df_sorted) - 1):
-            current = df_sorted.iloc[i]
-            next_segment = df_sorted.iloc[i + 1]
-            
-            # Check if segments overlap
-            if current['END'] > next_segment['START'] and current['SPEAKER'] != next_segment['SPEAKER']:
-                overlap_start = next_segment['START']
-                overlap_end = min(current['END'], next_segment['END'])
-                overlap_duration = overlap_end - overlap_start
+        # Sort by time, with 'end' events before 'start' events at same time
+        events.sort(key=lambda x: (x[1], x[0] == 'start'))
+        
+        # Track active segments
+        active_segments = {}
+        
+        for event_type, time, speaker, idx, seg_end in events:
+            if event_type == 'start':
+                # Check for overlaps with all currently active segments
+                for active_speaker, active_data in list(active_segments.items()):
+                    if active_speaker != speaker:
+                        overlap_start = time
+                        overlap_end = min(seg_end, active_data['end'])
+                        
+                        if overlap_end > overlap_start:
+                            overlaps.append({
+                                'start': overlap_start,
+                                'end': overlap_end,
+                                'duration': overlap_end - overlap_start,
+                                'speakers': sorted([speaker, active_speaker])
+                            })
                 
-                if overlap_duration > 0:
-                    overlaps.append({
-                        'start': overlap_start,
-                        'end': overlap_end,
-                        'duration': overlap_duration,
-                        'speakers': [current['SPEAKER'], next_segment['SPEAKER']]
-                    })
+                # Add this segment to active segments
+                active_segments[speaker] = {
+                    'idx': idx,
+                    'end': seg_end,
+                    'start': time
+                }
+            else:  # end event
+                # Remove from active if this is the matching segment
+                if speaker in active_segments and active_segments[speaker]['idx'] == idx:
+                    del active_segments[speaker]
         
         total_overlap_duration = sum(o['duration'] for o in overlaps)
         
         return {
             'num_overlaps': len(overlaps),
             'total_overlap_duration': total_overlap_duration,
-            'overlap_details': overlaps
+            'overlap_details': overlaps[:100]  # Limit to first 100 for memory
         }
     
-    def diarize_batch(self, audio_files: List[Path], output_dir: Path, save_rttm: bool = True) -> Dict[str, Any]:
+    def diarize_batch(
+        self, 
+        audio_files: List[Path], 
+        output_dir: Path, 
+        save_rttm: bool = True,
+        show_progress: bool = True,
+        skip_existing: bool = True
+    ) -> Dict[str, Any]:
         """
         Diarize multiple audio files in batch.
         
@@ -265,6 +316,8 @@ class EnhancedDiarizer:
             audio_files: List of audio file paths
             output_dir: Directory to save results
             save_rttm: Whether to save RTTM files
+            show_progress: Show progress bar
+            skip_existing: Skip files with existing RTTM files
             
         Returns:
             Dictionary with batch processing results
@@ -272,12 +325,18 @@ class EnhancedDiarizer:
         output_dir.mkdir(parents=True, exist_ok=True)
         results = {}
         
-        for audio_path in audio_files:
+        iterator = tqdm(audio_files, desc="Diarizing") if show_progress else audio_files
+        
+        for audio_path in iterator:
             try:
                 # Skip if RTTM already exists
                 rttm_path = output_dir / f"{audio_path.stem}.rttm"
-                if rttm_path.exists() and save_rttm:
+                if skip_existing and rttm_path.exists() and save_rttm:
                     logger.info(f"RTTM already exists for {audio_path.name}, skipping")
+                    results[str(audio_path)] = {
+                        'skipped': True,
+                        'rttm_path': str(rttm_path)
+                    }
                     continue
                 
                 # Perform diarization
@@ -301,12 +360,26 @@ class EnhancedDiarizer:
                     'annotation': processed_annotation,
                     'dataframe': df,
                     'statistics': stats,
-                    'rttm_path': str(rttm_path) if save_rttm else None
+                    'rttm_path': str(rttm_path) if save_rttm else None,
+                    'success': True
                 }
                 
             except Exception as e:
-                logger.error(f"Failed to process {audio_path}: {e}")
-                results[str(audio_path)] = {'error': str(e)}
+                logger.error(f"Failed to process {audio_path}: {e}", exc_info=True)
+                results[str(audio_path)] = {
+                    'error': str(e),
+                    'success': False
+                }
+        
+        # Summary statistics
+        successful = sum(1 for r in results.values() if r.get('success', False))
+        skipped = sum(1 for r in results.values() if r.get('skipped', False))
+        failed = len(results) - successful - skipped
+        
+        logger.info(
+            f"Batch processing complete: {successful} successful, "
+            f"{skipped} skipped, {failed} failed"
+        )
         
         return results
     
@@ -315,17 +388,51 @@ class EnhancedDiarizer:
         try:
             with sf.SoundFile(audio_path) as f:
                 return len(f) / f.samplerate
-        except:
+        except Exception as e:
+            logger.warning(f"soundfile failed for {audio_path}, using torchaudio: {e}")
             # Fallback using torchaudio
             waveform, sample_rate = torchaudio.load(audio_path)
             return waveform.shape[1] / sample_rate
+    
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - cleanup resources."""
+        if hasattr(self, 'pipeline') and self.pipeline is not None:
+            # Clear GPU cache if using CUDA
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.info("Cleared CUDA cache")
+        return False
 
 
 # Example usage
 if __name__ == "__main__":
     import logging
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
     
-    diarizer = EnhancedDiarizer()
-    # results = diarizer.diarize_batch([Path("input.flac")], Path("output/"))
-    # print(f"Diarization results: {results}")
+    # Using context manager for automatic cleanup
+    with EnhancedDiarizer() as diarizer:
+        audio_files = list(Path("input_dir").glob("*.flac"))
+        results = diarizer.diarize_batch(
+            audio_files, 
+            Path("output/"),
+            show_progress=True,
+            skip_existing=True
+        )
+        
+        # Print summary
+        for filepath, result in results.items():
+            if result.get('success'):
+                stats = result['statistics']
+                print(f"\n{Path(filepath).name}:")
+                print(f"  Speakers: {stats['num_speakers']}")
+                print(f"  Duration: {stats['total_speech_duration']:.2f}s")
+                for speaker_stat in stats['speakers']:
+                    print(f"    {speaker_stat['speaker']}: "
+                          f"{speaker_stat['speaking_percentage']:.1f}%")

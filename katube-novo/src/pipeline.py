@@ -13,7 +13,7 @@ from .config import Config
 from .youtube_downloader import YouTubeDownloader
 from .youtube_scanner import YouTubeChannelScanner
 from .audio_segmenter import AudioSegmenter
-from .diarizer import EnhancedDiarizer
+from .diarizer_new import EnhancedDiarizer
 from .overlap_detector import OverlapDetector
 from .speaker_separator import SpeakerSeparator
 from .stt_whisper import WhisperSTTTranscriber
@@ -58,13 +58,6 @@ class AudioProcessingPipeline:
         self.diarizer = EnhancedDiarizer(huggingface_token)
         self.overlap_detector = OverlapDetector()
         self.speaker_separator = SpeakerSeparator()
-        
-        # Initialize filters
-        # Completeness filter moved to separate file (src/audio_completeness_filter.py)
-        self.enable_completeness_filter = False  # DISABLED - moved to separate file
-        
-        logger.info("🔍 Filtros de áudio:")
-        logger.info("   - Filtro de completude: DESABILITADO (arquivo separado)")
         
         # Initialize MOS quality filter (OBRIGATÓRIO)
         self.enable_mos_filter = True  # Sempre habilitado
