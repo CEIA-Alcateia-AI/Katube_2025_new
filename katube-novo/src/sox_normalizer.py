@@ -20,7 +20,7 @@ class SoxNormalizer:
     """
     
     def __init__(self, 
-                 target_sample_rate: int = 48000,
+                 target_sample_rate: int = 16000,
                  target_format: str = "flac",
                  target_channels: int = 1,
                  normalize_gain: bool = True):
@@ -28,12 +28,12 @@ class SoxNormalizer:
         Initialize Sox normalizer.
         
         Args:
-            target_sample_rate: Target sample rate (default: 48000 Hz)
+            target_sample_rate: Target sample rate (default: 16000 Hz)
             target_format: Target audio format (default: flac)
             target_channels: Target number of channels (default: 1 = mono)
             normalize_gain: Whether to normalize gain (default: True)
         """
-        self.target_sample_rate = target_sample_rate
+        self.target_sample_rate = 16000
         self.target_format = target_format
         self.target_channels = target_channels
         self.normalize_gain = normalize_gain

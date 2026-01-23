@@ -386,7 +386,7 @@ class AudioSegmenter:
                 duration = (end_sample - start_sample) / self.sample_rate
                 
                 if duration < self.min_duration:
-                    continue
+                    logger.warning(f"⚠️ Áudio curto ({duration:.2f}s) detectado. Passando arquivo inteiro sem cortes.")
                 
                 # ... (Sua lógica de chunking para áudios longos permanece igual) ...
                 # Vamos focar no salvamento do segmento normal:
