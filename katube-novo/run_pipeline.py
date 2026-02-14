@@ -73,6 +73,7 @@ def main():
     parser.add_argument("--output-base-dir", type=Path, default=Config.OUTPUT_DIR, help="Diretório base onde as sessões de saída serão criadas.")
     parser.add_argument('--cleanup-policy', type=str, default='final_dataset', choices=['final_dataset', 'intermediate', 'all_except_raw_data', 'none'], help="Política de limpeza a ser aplicada no final.")
     parser.add_argument('--use-cuda', action=argparse.BooleanOptionalAction, default=True, help="Habilita o uso de GPU (CUDA) se disponível.")
+    parser.add_argument('--use-denoiser', type=bool, default=False, help="Habilita o uso do Denoiser [DeepFilterNet].")
 
     # --- Parsing dos Argumentos ---
     args = parser.parse_args()
@@ -88,6 +89,7 @@ def main():
     logger.info(f"Diretório Base de Saída: {args.output_base_dir}")
     logger.info(f"Política de Cleanup: {args.cleanup_policy}")
     logger.info(f"Usar CUDA: {args.use_cuda}")
+    logger.info(f"Usar CUDA: {args.use_denoiser}")
 
 
     # --- Execução da Pipeline ---
@@ -97,7 +99,8 @@ def main():
             huggingface_token=huggingface_token,
             segment_min_duration=args.min_duration,
             segment_max_duration=args.max_duration,
-            use_cuda=args.use_cuda
+            use_cuda=args.use_cuda,
+            use_denoiser=args.use_denoiser
         )
 
         results = pipeline.process_local_audio(

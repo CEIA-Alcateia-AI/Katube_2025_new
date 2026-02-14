@@ -181,4 +181,4 @@ models/
 
 #Arquivos muito grandes
 nohup.out
-katube-novo/dataset/dataset.csv
+dataset/dataset.csv

@@ -42,7 +42,8 @@ class AudioProcessingPipeline:
                  huggingface_token: Optional[str] = None,
                  segment_min_duration: float = 10.0,
                  segment_max_duration: float = 15.0,
-                 use_cuda: bool = True):
+                 use_cuda: bool = True,
+                 use_denoiser: bool = False):
         
         # Set up directories
         self.output_base_dir = output_base_dir or Config.OUTPUT_DIR
@@ -56,6 +57,7 @@ class AudioProcessingPipeline:
         
         # Completeness filter moved to separate file (src/audio_completeness_filter.py)
         self.enable_completeness_filter = False  # DISABLED - moved to separate file
+        self.use_denoiser = use_denoiser
         
         logger.info("🔍 Filtros de áudio:")
         logger.info("   - Filtro de completude: DESABILITADO (arquivo separado)")
@@ -95,8 +97,9 @@ class AudioProcessingPipeline:
         )
         
         # Initialize denoiser
-        self.denoiser = Denoiser(model_name="DeepFilterNet3")
-        logger.info("✅ Denoiser (DeepFilterNet3) inicializado com sucesso")
+        if self.use_denoiser:
+            self.denoiser = Denoiser(model_name="DeepFilterNet3")
+            logger.info("✅ Denoiser (DeepFilterNet3) inicializado com sucesso")
         
         # Initialize Sox normalizer for final processing
         self.sox_normalizer = SoxNormalizer(
@@ -1308,19 +1311,25 @@ class AudioProcessingPipeline:
                 utilizou_denoiser = True
                 approved_with_denoise += 1
                 denoised_path = denoiser_dir / f"{segment_id}.flac"
-                    
-                try:
-                    logger.info(f"  Applying DeepFilterNet3...")
-                    self.denoiser.process_file(
-                        str(audio_file),
-                        str(denoised_path)
-                    )
-                    denoised_success += 1
-                    logger.info(f"  Denoised successfully")
-                except Exception as e:
-                    logger.error(f"  Error during denoising: {e}")
-                    # Se falhar, copiar original
+                
+                if self.use_denoiser:
+                    try:
+                        logger.info(f"  Applying DeepFilterNet3...")
+                        self.denoiser.process_file(
+                            str(audio_file),
+                            str(denoised_path)
+                        )
+                        denoised_success += 1
+                        logger.info(f"  Denoised successfully")
+                    except Exception as e:
+                        logger.error(f"  Error during denoising: {e}")
+                        # Se falhar, copiar original
+                        shutil.copy2(audio_file, denoised_path)
+                else:
+                    # Se denoiser nao habilitado, apenas copiar
                     shutil.copy2(audio_file, denoised_path)
+                    logger.info(f"  Denoiser not enabled, copied original audio")
+                
                 
                 # Adicionar ao JSON final (TODOS os segmentos, aprovados e rejeitados)
                 # Extrair timestamps do nome do arquivo FLAC
