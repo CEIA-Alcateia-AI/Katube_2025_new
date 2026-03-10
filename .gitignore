@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Ambientes virtuais
+.env
+.venv
+env/
+venv/
+
+# Conda
+.conda/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Dataset - arquivos grandes
+dataset/audio_dataset/*
+
+# Arquivos de áudio
+arquivos/audios/*
+arquivos/temp/*
+
+# Logs
+*.log
+
+# Credenciais e segredos
+.env*
+*.pem
+*.key
+secrets/
+credentials/
+
+# OS
+.DS_Store
+Thumbs.db
